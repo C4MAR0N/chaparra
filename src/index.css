@@ -1,0 +1,222 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --primary-green: #2E7D32;
+  --primary-green-dark: #1B5E20;
+  --primary-green-light: #4CAF50;
+  --accent-gold: #D97706;
+  --accent-emerald: #10B981;
+  --bg-farm: #F3F7F4;
+  --card-bg: #FFFFFF;
+  --text-dark: #1F2937;
+  --text-muted: #6B7280;
+  --border-color: #E5E7EB;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-farm);
+  color: var(--text-dark);
+  min-height: 100vh;
+  padding-bottom: 80px; /* Space for bottom mobile nav */
+}
+
+/* Custom Utilities for Green Farm Aesthetic */
+.bg-farm-green {
+  background-color: var(--primary-green-dark);
+}
+
+.bg-farm-header {
+  background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 60%, #388E3C 100%);
+}
+
+.text-farm-green {
+  color: var(--primary-green);
+}
+
+.border-farm-green {
+  border-color: var(--primary-green);
+}
+
+.card-farm {
+  background: #FFFFFF;
+  border-radius: 16px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 12px rgba(27, 94, 32, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-farm:active {
+  transform: scale(0.995);
+}
+
+.btn-farm-primary {
+  background-color: var(--primary-green);
+  color: #FFFFFF;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 10px rgba(46, 125, 50, 0.25);
+  transition: all 0.2s ease;
+  min-height: 48px; /* Touch friendly */
+}
+
+.btn-farm-primary:hover {
+  background-color: var(--primary-green-dark);
+}
+
+.btn-farm-secondary {
+  background-color: #E8F5E9;
+  color: var(--primary-green-dark);
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: 1px solid #A5D6A7;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  min-height: 48px;
+}
+
+.btn-farm-secondary:hover {
+  background-color: #C8E6C9;
+}
+
+/* Status Badges */
+.badge-sano {
+  background-color: #DEF7EC;
+  color: #03543F;
+  border: 1px solid #84E1BC;
+}
+
+.badge-tratamiento {
+  background-color: #FDF6B2;
+  color: #723B13;
+  border: 1px solid #FCE8E6;
+}
+
+.badge-cuarentena {
+  background-color: #FDE8E8;
+  color: #9B1C1C;
+  border: 1px solid #F8B4B4;
+}
+
+.badge-vacunado {
+  background-color: #E1EFFE;
+  color: #1E429F;
+  border: 1px solid #A4CAFE;
+}
+
+.badge-observacion {
+  background-color: #EDEBFE;
+  color: #5521B5;
+  border: 1px solid #CDDBFE;
+}
+
+/* Custom Inputs */
+.input-farm {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 12px;
+  font-size: 1rem;
+  background-color: #FFFFFF;
+  color: var(--text-dark);
+  transition: border-color 0.2s ease;
+  min-height: 48px;
+}
+
+.input-farm:focus {
+  outline: none;
+  border-color: var(--primary-green);
+  box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15);
+}
+
+/* Bottom Nav bar styling */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #FFFFFF;
+  border-top: 1px solid #E2E8F0;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: #64748B;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 10px;
+  transition: color 0.15s ease, background 0.15s ease;
+  flex: 1;
+}
+
+.nav-item.active {
+  color: var(--primary-green-dark);
+  background: #E8F5E9;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.modal-container {
+  background: #FFFFFF;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

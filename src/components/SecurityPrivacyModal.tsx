@@ -38,9 +38,29 @@ export function PrivacyContent() {
         </p>
       </section>
       <p>
-        No podemos recuperar una contraseña olvidada ni enviar un correo para restablecerla. La
-        aplicación abierta funciona sin conexión; volver a abrirla requiere que sus archivos estén
-        disponibles. No incorpora instalación sin conexión ni sincronización.
+        No podemos recuperar una contraseña olvidada ni enviar un correo para restablecerla.
+        Chaparra se puede instalar en el móvil desde el navegador y, una vez instalada, se abre y
+        funciona sin cobertura. Lo que no hace es sincronizar entre dispositivos: cada uno guarda su
+        propia explotación.
+      </p>
+      <p className="border-t border-stone-200 pt-4">
+        <a
+          className="font-semibold text-brand-700 underline"
+          href={`${import.meta.env.BASE_URL}privacidad.html`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Política de privacidad completa
+        </a>
+        {' · '}
+        <a
+          className="font-semibold text-brand-700 underline"
+          href={`${import.meta.env.BASE_URL}borrar-cuenta.html`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Cómo borrar tu cuenta
+        </a>
       </p>
     </div>
   );

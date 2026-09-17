@@ -1,181 +1,100 @@
 # Checklist de publicación en Google Play y App Store
 
-Auditoría de Chaparra frente a los requisitos de ambas tiendas.
-Fecha: 17 de septiembre de 2026. App en producción: https://c4mar0n.github.io/chaparra/
+Auditoría ejecutada el 17 de septiembre de 2026 contra
+<https://chaparra.agrovanza.es>. Los detalles de cada ejecución están en
+[`INFORME-TIENDAS.md`](./INFORME-TIENDAS.md).
 
----
+## Cómo leer los estados
 
-## 0. Lo primero, y es importante
+- ✅ **Comprobado:** la ejecución indicada produjo el resultado esperado.
+- ⚠️ **Parcial o pendiente:** solo se pudo comprobar una parte o falta una actuación externa.
+- ❌ **Bloqueo:** el resultado actual impide enviar o publicar.
+- ⬜ **No comprobado:** no había navegador, credenciales, dispositivo o consola de tienda.
 
-**Chaparra es una aplicación web. Ninguna de las dos tiendas acepta una URL.** No existe
-forma de «subir la web» a Google Play ni a la App Store: hay que empaquetarla dentro de una
-aplicación nativa que la contenga.
+Ningún estado verde se basa únicamente en leer el código.
 
-| Tienda | Cómo se empaqueta |
-|---|---|
-| Google Play | **TWA** (Trusted Web Activity) con Bubblewrap o PWABuilder, o bien **Capacitor** |
-| App Store | **Capacitor** sobre WKWebView. En iOS no existe equivalente a TWA |
+Las filas de navegador las completó la revisión posterior con el navegador integrado; el resto
+proceden de la auditoría automatizada, que no disponía de uno.
 
-Y hay un riesgo que conviene conocer antes de gastar dinero y tiempo:
+## Estado público y funcional
 
-> **Apple, directriz 4.2 (Minimum Functionality).** Es el motivo de rechazo más frecuente para
-> aplicaciones nacidas de una web. Apple rechaza los envoltorios que se limitan a cargar un sitio
-> responsive sin aportar navegación nativa, comportamiento sin conexión, notificaciones ni
-> integración con el dispositivo. Para pasar la revisión, Chaparra necesita aportar valor nativo
-> real: cámara para las facturas, funcionamiento sin cobertura, notificaciones de tareas
-> sanitarias, biometría para entrar, o compartir nativo.
+| Requisito                           | Estado | Ejecución y resultado                                                                                                                                                                       |
+| ----------------------------------- | -----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dominio de producción por HTTPS     |     ✅ | `fetch('https://chaparra.agrovanza.es/')`: `200`, URL final sin redirección y `text/html`                                                                                                   |
+| Manifiesto PWA servido              |     ✅ | `/manifest.webmanifest`: `200 application/manifest+json`; JSON válido, `display=standalone`, `start_url=./`, `scope=./`                                                                     |
+| Iconos declarados                   |     ✅ | Descarga y lectura del encabezado PNG: 192×192, 512×512, maskable 192×192 y 512×512; `apple-touch-icon` 180×180                                                                             |
+| Recursos de arranque                |     ✅ | Todos los JS, CSS, fuente, icono y manifiesto enlazados desde la portada devolvieron `200`                                                                                                  |
+| Service worker                      |     ✅ | Comprobado en el navegador sobre el dominio público: registrado y `activated`, con 14 recursos precargados (1 en `chaparra-shell-v2` y 13 en `chaparra-assets-v2`)                          |
+| Diseño móvil sin desbordamiento     |     ✅ | Navegador a 375×812 recorriendo las cuatro pestañas: desbordamiento horizontal de 0 px en todas                                                                                             |
+| Áreas táctiles de 44 px             |     ✅ | Medidas en las cuatro pestañas: ningún control por debajo del mínimo salvo «Saltar al contenido», que está oculto hasta recibir el foco                                                     |
+| Consola sin errores                 |     ✅ | Recorrido completo de las cuatro pestañas sin un solo mensaje de error                                                                                                                       |
+| Formularios accesibles              |     ✅ | Ningún `input`, `select` ni `textarea` sin etiqueta asociada en las cuatro pestañas                                                                                                          |
+| Supabase Auth accesible             |     ✅ | `/auth/v1/health`: `200`, GoTrue `v2.197.0`                                                                                                                                                 |
+| RLS ante una consulta anónima       |     ⚠️ | La petición REST con la clave pública devolvió `200 []`, sin filtrar filas. **No comprobado** el aislamiento entre dos usuarios autenticados porque no se manejaron cuentas ni credenciales |
+| Registro, acceso y multidispositivo |     ⬜ | **No comprobado:** requería una cuenta de prueba y el encargo prohíbe crear cuentas o manejar credenciales                                                                                  |
+| Sincronización y lápidas            |     ✅ | `npm test`: 62/62; incluye subida, bajada, conflictos por fecha, lápidas y reconstrucción                                                                                                   |
+| Apertura real sin cobertura         |     ⬜ | **No comprobado:** requiere navegador o dispositivo con una sesión preparada                                                                                                                |
+| Borrado completo de cuenta          |     ❌ | La migración `002_borrar_cuenta.sql` todavía no está aplicada. No se puede afirmar que funcione en producción hasta aplicarla y probar una cuenta desechable                                |
+| OCR propio disponible               |     ⚠️ | `worker.min.js` y `spa.traineddata.gz` públicos devuelven `200`; 14 pruebas de interpretación pasan. **No comprobado** el recorrido completo cámara/PDF→OCR en navegador                    |
+| Límite de adjunto de 2 MB           |     ✅ | Ejecución directa: PDF de 2.097.152 bytes aceptado; 2.097.153 bytes rechazado con el mensaje previsto                                                                                       |
+| Exportación Excel                   |     ✅ | 5 pruebas de ZIP/XLSX pasan y la prueba de manada acotada arrastra solo sus datos                                                                                                           |
+| Open-Meteo, cinco días              |     ✅ | La API devolvió `200`, cinco fechas y cinco valores de precipitación                                                                                                                        |
+| AEMET público                       |     ❌ | `/tiempo/indice.json` devuelve `404`; hoy la app cae a Open-Meteo. Falta configurar la clave y ejecutar el flujo de AEMET                                                                   |
+| Política de privacidad pública      |     ✅ | `/privacidad.html`: `200 text/html`                                                                                                                                                         |
+| Página pública de borrado           |     ⚠️ | La URL pública devuelve `200`, pero la versión desplegada contiene dos frases antiguas sobre datos solo locales. La fuente quedó corregida; falta desplegarla                               |
+| CI de `master`                      |     ✅ | API de GitHub: último flujo «Desplegar en GitHub Pages», `completed/success`, actualizado `2026-09-17T14:58:41Z`                                                                            |
+| Formato                             |     ✅ | `npm run format:check`: todos los ficheros comprobados usan Prettier                                                                                                                        |
+| Pruebas                             |     ✅ | `npm test`: 62 pruebas, 62 correctas, 0 fallos                                                                                                                                              |
+| Build                               |     ✅ | `npm run build`: Vite generó `dist/` correctamente; salida completa en el informe                                                                                                           |
 
-Google Play es bastante más permisivo con las TWA, siempre que la aplicación sea una PWA
-instalable en condiciones. **Lo sensato es empezar por Android y dejar iOS para después.**
+## Google Play
 
----
+| Requisito                      | Estado | Detalle                                                                                                                                                                                                               |
+| ------------------------------ | -----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dominio TWA                    |     ✅ | `host`, `startUrl`, `webManifestUrl`, `fullScopeUrl` e iconos usan `chaparra.agrovanza.es`                                                                                                                            |
+| Paquete                        |     ✅ | `es.agrovanza.chaparra` coincide entre TWA y Digital Asset Links                                                                                                                                                      |
+| API objetivo 36                |     ⚠️ | El manifiesto deja `targetSdkVersion: 36` como control del proyecto. Bubblewrap no consume ese campo: hay que generar con Bubblewrap 1.25.0 o posterior y verificar `targetSdkVersion 36` en el Gradle/AAB resultante |
+| Accesos directos               |     ✅ | «Rebaño» y «Facturas» apuntan a enlaces que la aplicación interpreta después del acceso                                                                                                                               |
+| Digital Asset Links en `dist/` |     ✅ | La compilación copia `dist/.well-known/assetlinks.json`; la vista previa lo sirve como `application/json`                                                                                                             |
+| Huella de firma real           |     ❌ | El JSON contiene un marcador deliberadamente inválido. Sustituirlo por la SHA‑256 de **Play App Signing** antes de desplegar                                                                                          |
+| Digital Asset Links público    |     ❌ | La URL pública todavía devuelve `404`; depende de desplegar y de completar la huella                                                                                                                                  |
+| AAB firmado y verificación TWA |     ⬜ | **No comprobado:** no hay proyecto generado, huella, keystore de publicación ni dispositivo                                                                                                                           |
+| Data Safety                    |     ⚠️ | Respuestas preparadas en [`GOOGLE-PLAY.md`](./GOOGLE-PLAY.md); no enviar hasta aplicar la migración 002                                                                                                               |
+| Clasificación IARC             |     ⚠️ | Respuestas preparadas; la clasificación final solo la emite el cuestionario de Play Console                                                                                                                           |
+| Cuenta del revisor             |     ❌ | Debe crearla el dueño con datos ficticios y entregarla en «Acceso a la aplicación»                                                                                                                                    |
+| Ficha y capturas               |     ⚠️ | Textos y guion listos en [`FICHA-TIENDAS.md`](./FICHA-TIENDAS.md); las imágenes no se han creado por indicación expresa                                                                                               |
 
-## 1. Estado verificado hoy
+## App Store
 
-Comprobado ejecutando la aplicación, no por lectura del código.
+| Requisito                                       | Estado | Detalle                                                                                          |
+| ----------------------------------------------- | -----: | ------------------------------------------------------------------------------------------------ |
+| Aplicación iOS nativa                           |     ❌ | No existe todavía un proyecto Xcode/Capacitor que se pueda archivar                              |
+| Funcionalidad por encima de una web empaquetada |     ❌ | Riesgo directo de la directriz 4.2. Plan concreto y estimado en [`APP-STORE.md`](./APP-STORE.md) |
+| Ficha App Privacy                               |     ⚠️ | Respuestas preparadas, pero deben revisarse contra el binario iOS final y sus SDK                |
+| Borrado dentro de la aplicación                 |     ❌ | La interfaz existe, pero la función del servidor no hasta aplicar la migración 002               |
+| Cuenta del revisor                              |     ❌ | Debe crearla el dueño; la cuenta real con 235 vacas no se debe entregar                          |
+| Ficha y capturas                                |     ⚠️ | Textos y tamaños listos; no se han creado capturas                                               |
+| Archive/TestFlight/App Review                   |     ⬜ | **No comprobado:** requieren Mac, Xcode, cuenta de Apple y un binario que aún no existe          |
 
-| Requisito | Estado | Detalle |
-|---|---|---|
-| Servida por HTTPS | ✅ | GitHub Pages con `https_enforced` |
-| Contexto seguro (`crypto.subtle`) | ✅ | Verificado en la URL pública; el registro funciona |
-| Diseño adaptable a móvil | ✅ | 375 px y 1440 px, sin scroll horizontal |
-| Áreas táctiles ≥ 44 px | ✅ | Ningún botón por debajo del mínimo |
-| Sin errores en consola | ✅ | Consola limpia en todo el recorrido |
-| Etiquetas de formulario | ✅ | Todo `input` con su `<label>` |
-| `viewport` y `theme-color` | ✅ | Presentes en `index.html` |
-| `apple-mobile-web-app-capable` | ✅ | Presente |
-| Borrado de cuenta **dentro** de la app | ✅ | `DeleteAccountModal`, con doble confirmación |
-| Compilación reproducible en CI | ✅ | Formato, pruebas y build en cada push |
-| Web App Manifest | ✅ | `public/manifest.webmanifest`, con rutas relativas |
-| Service worker / sin conexión | ✅ | `public/sw.js`, escrito a mano y sin dependencias |
-| Iconos PNG 192 y 512, incluido maskable | ✅ | Más `apple-touch-icon` de 180 |
-| Política de privacidad en URL pública | ✅ | [/privacidad.html](https://c4mar0n.github.io/chaparra/privacidad.html) |
-| URL web de solicitud de borrado de cuenta | ✅ | [/borrar-cuenta.html](https://c4mar0n.github.io/chaparra/borrar-cuenta.html) |
-| Contraste de color AA | ⚠️ | No medido con herramienta; pendiente de auditoría formal |
-| Funcionalidad nativa para Apple 4.2 | ❌ | Sigue siendo el riesgo principal en iOS |
+## Orden de cierre
 
----
+1. Aplicar `supabase/migraciones/002_borrar_cuenta.sql` y probar el borrado con una cuenta desechable.
+2. Crear la aplicación en Play Console, activar Play App Signing y copiar su SHA‑256 en
+   `public/.well-known/assetlinks.json`.
+3. Desplegar y comprobar que Digital Asset Links responde `200 application/json` sin redirección.
+4. Generar con Bubblewrap 1.25.0 o posterior, revisar el Gradle y el AAB con API objetivo 36, e
+   instalarlo desde una pista interna para confirmar que no aparece la barra del navegador.
+5. Crear la cuenta sintética del revisor y las capturas descritas.
+6. Enviar Android primero.
+7. Implementar y probar el plan nativo de iOS antes de abrir una revisión de App Store.
 
-## 2. Lo que falta, por bloques
+## Referencias oficiales
 
-### 2.1 PWA instalable — **hecho**
-
-Chaparra ya se instala desde el navegador y funciona sin cobertura:
-
-- `public/manifest.webmanifest` con `display: standalone`, colores de marca y rutas relativas,
-  para que funcione igual en local que bajo `/chaparra/`.
-- Iconos PNG de 192 y 512, variantes `maskable` con la marca dentro de la zona segura, y
-  `apple-touch-icon` de 180. Generados a partir de `public/icon.svg`, así que se pueden rehacer.
-- `public/sw.js`: red primero para la navegación, caché primero con revalidación en segundo plano
-  para estáticos y tipografías. Sin Workbox ni dependencias añadidas.
-
-> El pliego original dejó PWA fuera de alcance de forma deliberada. Ese acuerdo se tomó antes de
-> plantear la publicación en tiendas; al pasar a serlo, dejó de ser un extra.
-
-### 2.2 Empaquetado
-
-**Android (TWA):** generar el proyecto con Bubblewrap o PWABuilder, publicar
-`.well-known/assetlinks.json` en el dominio para verificar la propiedad —así la app abre sin
-barra de navegador— y firmar el App Bundle. Debe apuntar a **API 36 (Android 16)**: desde el
-31 de agosto de 2026 es obligatorio para aplicaciones nuevas y actualizaciones.
-
-**iOS (Capacitor):** requiere un Mac con Xcode, o un servicio de compilación en la nube.
-Añadir funcionalidad nativa antes de enviar, por lo de la directriz 4.2.
-
-### 2.3 Fichas de tienda
-
-Icono de 512×512, gráfico destacado de 1024×500 (Play), capturas por tamaño de dispositivo,
-descripción corta y larga, categoría, clasificación por edades, y datos de contacto del
-desarrollador.
-
-### 2.4 Privacidad y datos
-
-Aquí Chaparra parte con ventaja, y conviene aprovecharlo: **los datos no salen del dispositivo**,
-así que tanto el formulario de seguridad de datos de Play como las etiquetas de privacidad de
-Apple se pueden rellenar como «no se recopilan datos». Es un argumento comercial además de
-un trámite.
-
-**Páginas publicadas — hecho:**
-
-- [Política de privacidad](https://c4mar0n.github.io/chaparra/privacidad.html)
-- [Borrado de cuenta](https://c4mar0n.github.io/chaparra/borrar-cuenta.html) — Play lo exige a
-  toda app que permita crear cuenta, además del borrado dentro de la aplicación. En aplicación
-  plena desde el 15 de abril de 2024.
-
-Ambas declaran el contacto `agro@agrovanza.es`. Desde que la tipografía se aloja en el propio
-dominio, **la aplicación no carga ningún recurso de terceros**: la única conexión que queda es
-la del propio alojamiento (GitHub Pages registra la IP, como cualquier servidor web), y una vez
-instalada en el móvil funciona sin conexión.
-
-Esto permite responder «no se recopilan datos» en el formulario de seguridad de datos de Play y
-en las etiquetas de privacidad de Apple sin ninguna salvedad incómoda.
-
-### 2.5 Cuentas, costes y plazos
-
-| Concepto | Coste | Nota |
-|---|---|---|
-| Google Play Console | 25 USD, pago único | |
-| Apple Developer Program | 99 USD al año | Recurrente |
-| Mac con Xcode | — | Imprescindible para compilar iOS |
-
-**El plazo oculto de Google:** las cuentas **personales** de Play creadas a partir del
-13 de noviembre de 2023 deben superar una prueba cerrada con **12 probadores durante 14 días
-seguidos** antes de poder solicitar acceso a producción. Google comprueba además que esos
-probadores usaran la app de verdad, y cumplir el mínimo no garantiza la aprobación. Las cuentas
-de **organización** están exentas. Si la ganadería tiene sociedad, abrir la cuenta como empresa
-ahorra semanas.
-
----
-
-## 3. Camino recomendado
-
-1. ~~**PWA primero.**~~ **Hecho.** Chaparra se instala desde el navegador —icono en la pantalla
-   de inicio, pantalla completa, funcionando sin cobertura— sin tienda, sin cuotas y sin
-   revisión. Para empezar con un grupo de ganaderos, esto puede ser suficiente: se comparte un
-   enlace y listo.
-2. ~~**Política de privacidad y página de borrado de cuenta.**~~ **Hecho.**
-3. **Probarlo con ganaderos reales antes de pagar nada.** Instalando la PWA se recoge el mismo
-   aprendizaje que con una app de tienda, sin cuotas ni tiempos de revisión. Si el producto no
-   encaja, es mejor descubrirlo aquí.
-4. **Android vía TWA**, cuando el producto esté asentado. El empaquetado es cuestión de horas.
-   Contar con el plazo de los 12 probadores si la cuenta de Play es personal.
-5. **iOS al final**, y solo si compensa: 99 USD al año, un Mac y el riesgo real de la
-   directriz 4.2. Antes de enviar hay que añadir funcionalidad nativa de verdad —cámara para las
-   facturas, notificaciones de tareas sanitarias, biometría—, no basta con empaquetar la web.
-
----
-
-## Fuentes
-
-- [Meet Google Play's target API level requirement — Android Developers](https://developer.android.com/google/play/requirements/target-sdk)
-- [Target API level requirements for Google Play apps — Play Console Help](https://support.google.com/googleplay/android-developer/answer/11926878?hl=en)
-- [Understanding Google Play's app account deletion requirements — Play Console Help](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en)
-- [App testing requirements for new personal developer accounts — Play Console Help](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en)
-- [App Store Review Guidelines: Will Your Webview App Be Rejected? — MobiLoud](https://www.mobiloud.com/blog/app-store-review-guidelines-webview-wrapper)
-- [Rejected on Guideline 4.2.2 — Apple Developer Forums](https://developer.apple.com/forums/thread/82714)
-
----
-
-## Anexo · Previsión meteorológica
-
-La app muestra 5 días con litros previstos bajo la pantalla principal.
-
-**Open-Meteo** (modelo ECMWF) funciona ya, sin clave ni servidor.
-
-**AEMET**, la fuente oficial, requiere tres pasos que debe dar el titular:
-
-1. Pedir la API key en
-   [opendata.aemet.es](https://opendata.aemet.es/centrodedescargas/altaUsuario) con el correo
-   de la explotación. Llega por correo en minutos.
-2. Añadirla como secreto del repositorio: *Settings → Secrets and variables → Actions →
-   New repository secret*, con el nombre exacto **`AEMET_API_KEY`**.
-3. Lanzar la tarea *Previsión de AEMET* a mano la primera vez (*Actions → Run workflow*).
-
-A partir de ahí se actualiza sola cuatro veces al día y la app pasa a mostrar los datos de
-AEMET, indicando en pantalla qué dato viene de cada fuente.
-
-> **La clave de AEMET caduca cada 3 meses.** Cuando caduque, la tarea fallará con un 401 y
-> GitHub avisará por correo. Hay que pedir una nueva y sustituir el secreto. La app sigue
-> funcionando con Open-Meteo mientras tanto, así que no se queda sin previsión.
-
-Los municipios que se descargan se listan en `tiempo-municipios.json`, en la raíz.
+- [API objetivo de Google Play](https://developer.android.com/google/play/requirements/target-sdk)
+- [Digital Asset Links para TWA](https://developer.chrome.com/docs/android/trusted-web-activity/android-for-web-devs)
+- [Firma de aplicaciones de Play](https://support.google.com/googleplay/android-developer/answer/9842756)
+- [Seguridad de los datos](https://support.google.com/googleplay/android-developer/answer/10787469?hl=es)
+- [Borrado de cuentas](https://support.google.com/googleplay/android-developer/answer/13327111?hl=es)
+- [Clasificación de contenido](https://support.google.com/googleplay/android-developer/answer/9898843?hl=es)
+- [Directrices de revisión de Apple](https://developer.apple.com/app-store/review/guidelines/)
+- [Privacidad en App Store](https://developer.apple.com/app-store/app-privacy-details/)

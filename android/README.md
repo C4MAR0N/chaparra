@@ -1,129 +1,101 @@
-# Empaquetado Android (TWA)
+# Empaquetado Android con TWA
 
-Genera una app Android que envuelve la PWA de Chaparra mediante una
-**Trusted Web Activity**: un Chrome sin barra de navegador, a pantalla completa,
-indistinguible de una app nativa cuando la verificación de dominio es correcta.
+Chaparra se publica en Android como Trusted Web Activity. La asociación entre el paquete y
+<https://chaparra.agrovanza.es> permite abrirla sin barra del navegador.
 
-Configuración ya preparada en [`twa-manifest.json`](twa-manifest.json):
+## Configuración preparada
 
-| Campo | Valor |
-|---|---|
-| Identificador de paquete | `es.agrovanza.chaparra` |
-| Origen | `c4mar0n.github.io` |
-| URL de inicio | `/chaparra/` |
-| Target SDK | 36 — el mínimo que exige Play desde el 31/08/2026 |
-| Min SDK | 23 (Android 6) |
-| Iconos | los de la PWA, incluida la variante *maskable* |
+| Campo                    | Valor                   |
+| ------------------------ | ----------------------- |
+| Paquete                  | `es.agrovanza.chaparra` |
+| Origen                   | `chaparra.agrovanza.es` |
+| Inicio y ámbito          | `/`                     |
+| API mínima               | 23                      |
+| API objetivo             | 36                      |
+| Notificaciones delegadas | Desactivadas            |
+| Accesos directos         | Rebaño y Facturas       |
 
----
+El campo `targetSdkVersion` de `twa-manifest.json` documenta y permite auditar la versión esperada,
+pero Bubblewrap no lo consume. La API real procede de su plantilla Gradle. Hay que usar
+**Bubblewrap 1.25.0 o posterior**, cuya plantilla compila y apunta a API 36, y revisar el Gradle/AAB
+resultante.
 
-## Antes de empezar: dos pasos son tuyos
+## Claves: no confundirlas
 
-Hay dos cosas que esta guía **no** hace por ti, a propósito:
+- **Clave de subida:** la que guarda el dueño en `android.keystore` y usa para subir el AAB. No se
+  versiona ni se comparte.
+- **Clave de firma de la aplicación:** la conserva Google cuando se activa Play App Signing y firma
+  lo que reciben los usuarios. Su SHA‑256 es la que debe estar en
+  `public/.well-known/assetlinks.json`.
 
-1. **Crear el keystore.** Es la clave que firma la app. Si la pierdes, no podrás
-   volver a publicar una actualización en Google Play **nunca más**: Play rechaza
-   cualquier subida firmada con otra clave. Debes elegir tú su contraseña,
-   guardarla en tu gestor de contraseñas y hacer copia del archivo `.keystore`
-   fuera de este ordenador.
-2. **Aceptar las licencias del SDK de Android.** Es un acuerdo legal con Google y
-   te corresponde aceptarlo a ti.
+Perder la clave de subida complica las actualizaciones. Guardar archivo, alias y contraseñas en un
+gestor de secretos y en una copia externa. Este repositorio excluye el keystore.
 
-El archivo `.keystore` y su contraseña están excluidos del repositorio en
-`.gitignore`. No los subas jamás.
+## Generar sin sobrescribir esta guía
 
----
-
-## Paso 1 · Preparar el entorno
-
-Bubblewrap ya está instalado (`npm i -g @bubblewrap/cli`). La primera vez pide
-descargar el JDK 17 y el SDK de Android, unos 1,5 GB. **Ejecútalo en una terminal
-tuya**, no desde aquí, porque necesita respuestas interactivas.
+Instalar o actualizar la herramienta de forma consciente en el equipo del dueño:
 
 ```bash
+npm install --global @bubblewrap/cli@1.25.0
 bubblewrap doctor
 ```
 
-Responde `Y` a instalar el JDK y el SDK, y acepta las licencias cuando las muestre.
-
-## Paso 2 · Generar el proyecto
-
-Desde la carpeta `android/`, para que use el `twa-manifest.json` ya preparado:
+Desde `android/`, generar los archivos derivados en una subcarpeta. `update` recrea el destino, por
+eso no se ejecuta sobre la propia carpeta que contiene esta documentación:
 
 ```bash
-cd android && bubblewrap init --manifest=https://c4mar0n.github.io/chaparra/manifest.webmanifest
+bubblewrap update --skipVersionUpgrade --manifest ./twa-manifest.json --directory ./proyecto
+bubblewrap build --manifest ./twa-manifest.json --directory ./proyecto
 ```
 
-Te preguntará los datos: acepta los que propone, porque coinciden con el
-`twa-manifest.json`. Cuando llegue al keystore, elige **crear uno nuevo** y define
-tu contraseña. Anota el alias: `chaparra`.
+Bubblewrap puede pedir el JDK, el SDK de Android, la aceptación de licencias y las contraseñas del
+keystore. Esas decisiones corresponden al dueño. La salida esperada incluye:
 
-## Paso 3 · Compilar el APK
+- `app-release-signed.apk`, para la comprobación directa;
+- `app-release-bundle.aab`, para Play Console.
+
+Antes de subir, abrir `proyecto/app/build.gradle` y confirmar `compileSdkVersion 36` y
+`targetSdkVersion 36`. Play Console vuelve a verificar la API objetivo al recibir el AAB.
+
+## Digital Asset Links
+
+El archivo está en `public/.well-known/assetlinks.json` y la compilación web lo copia al mismo lugar
+de `dist/`. El marcador de huella es deliberadamente inválido para que no parezca una asociación
+terminada.
+
+Después de subir el primer AAB y activar Play App Signing:
+
+1. Abrir **Play Console → Integridad de la aplicación → Firma de aplicaciones de Play**.
+2. Copiar la huella **SHA‑256 del certificado de firma de la aplicación**, no la del certificado de
+   subida.
+3. Sustituir `REEMPLAZAR_POR_LA_HUELLA_SHA256_DE_PLAY_APP_SIGNING` conservando las parejas
+   hexadecimales mayúsculas separadas por `:`.
+4. Desplegar la web y comprobar:
 
 ```bash
-cd android && bubblewrap build
+curl -i https://chaparra.agrovanza.es/.well-known/assetlinks.json
 ```
 
-Pedirá la contraseña del keystore. Al terminar genera dos archivos:
+Debe devolver `200`, `Content-Type: application/json`, sin redirección, con el paquete y la huella
+correctos. Después instalar desde una pista interna de Play y confirmar en un dispositivo que no
+aparece la barra de Chrome. Una instalación firmada localmente necesita además la huella del
+keystore local para validar; no sustituye la prueba de la versión distribuida por Play.
 
-- `app-release-signed.apk` — para instalar directamente en tu móvil y probar
-- `app-release-bundle.aab` — el formato que exige Google Play para publicar
+## Antes de enviar
 
-## Paso 4 · Verificación de dominio (assetlinks)
+- Aplicar y probar `supabase/migraciones/002_borrar_cuenta.sql`.
+- Completar Data Safety e IARC según [`../docs/GOOGLE-PLAY.md`](../docs/GOOGLE-PLAY.md).
+- Preparar la cuenta ficticia del revisor y las imágenes de
+  [`../docs/FICHA-TIENDAS.md`](../docs/FICHA-TIENDAS.md).
+- Confirmar que la política y la página de borrado públicas contienen la versión corregida.
+- Instalar el AAB desde Play, recorrer la aplicación y probar modo avión/recuperación de red.
 
-Sin este paso la app abre **con barra de navegador** y no parece nativa.
+No se puede declarar «no se recopilan datos»: la cuenta y la explotación se sincronizan con
+Supabase. El OCR sí permanece en el dispositivo mientras lee el justificante.
 
-Al compilar, Bubblewrap genera `assetlinks.json` con la huella SHA-256 de tu
-clave. Ese archivo debe servirse en la **raíz del dominio**:
+## Referencias
 
-```
-https://c4mar0n.github.io/.well-known/assetlinks.json
-```
-
-Ojo: **no** vale bajo `/chaparra/`. La verificación es por origen, y el repo
-`chaparra` solo sirve su subcarpeta. Hace falta un repositorio de sitio de usuario
-llamado `C4MAR0N.github.io`, que todavía no existe.
-
-Para obtener la huella una vez creado el keystore:
-
-```bash
-keytool -list -v -keystore android/android.keystore -alias chaparra
-```
-
-Pásame esa huella SHA-256 y creo el repositorio con el `assetlinks.json` correcto.
-
----
-
-## Instalar el APK en el móvil
-
-1. Sube el APK a algún sitio al que llegue el teléfono. Lo más cómodo, usando el
-   repositorio que ya existe:
-   ```bash
-   gh release create v1.0.0-prueba android/app-release-signed.apk --title "Chaparra 1.0.0 (prueba)" --notes "Build de prueba"
-   ```
-2. Abre la URL de la release en el navegador del móvil y descarga el APK.
-3. Android pedirá permiso para **instalar apps de fuentes desconocidas** para ese
-   navegador. Acéptalo.
-4. Instala y abre.
-
-Si la verificación de dominio del paso 4 aún no está hecha, la app funcionará pero
-mostrará una barra con la dirección durante unos segundos.
-
----
-
-## Antes de subirla a Google Play
-
-- Cuenta de Play Console: 25 USD, pago único.
-- Si la cuenta es **personal** y se creó después del 13/11/2023: prueba cerrada con
-  **12 probadores durante 14 días seguidos** antes de poder pedir acceso a
-  producción. Las cuentas de **organización** están exentas.
-- Ficha de tienda: icono 512×512, gráfico destacado 1024×500, capturas, descripción,
-  categoría y clasificación por edades.
-- Formulario de seguridad de datos: Chaparra puede declarar **«no se recopilan
-  datos»**, porque no sale nada del dispositivo.
-- Enlace de política de privacidad:
-  https://c4mar0n.github.io/chaparra/privacidad.html
-- Enlace de borrado de cuenta (obligatorio al permitir crear cuenta):
-  https://c4mar0n.github.io/chaparra/borrar-cuenta.html
-
-Detalle completo en [`../docs/CHECKLIST-TIENDAS.md`](../docs/CHECKLIST-TIENDAS.md).
+- [Bubblewrap CLI](https://github.com/GoogleChromeLabs/bubblewrap/tree/main/packages/cli)
+- [API objetivo de Google Play](https://developer.android.com/google/play/requirements/target-sdk)
+- [Firma de aplicaciones de Play](https://support.google.com/googleplay/android-developer/answer/9842756)
+- [Digital Asset Links para TWA](https://developer.chrome.com/docs/android/trusted-web-activity/android-for-web-devs)

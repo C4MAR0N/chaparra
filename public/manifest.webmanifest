@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Chaparra · Gestión ganadera",
   "short_name": "Chaparra",
-  "description": "Cuaderno de campo para explotaciones ganaderas: crotales, sanidad, producción y facturas. Los datos se guardan en tu dispositivo.",
+  "description": "Cuaderno de campo para explotaciones ganaderas. Funciona sin cobertura y sincroniza tus datos entre dispositivos.",
   "lang": "es-ES",
   "dir": "ltr",
   "start_url": "./",
@@ -12,6 +12,20 @@
   "background_color": "#FAFAF9",
   "theme_color": "#1F4A33",
   "categories": ["business", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Abrir el rebaño",
+      "short_name": "Rebaño",
+      "url": "./?seccion=rebano",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Abrir las facturas",
+      "short_name": "Facturas",
+      "url": "./?seccion=facturas",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
   "icons": [
     {
       "src": "icon-192.png",

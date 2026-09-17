@@ -23,6 +23,20 @@ import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { FarmSettingsModal } from './FarmSettingsModal';
 import { Tiempo } from './Tiempo';
 type Tab = 'herd' | 'production' | 'invoices' | 'reports';
+const pestañasPorEnlace: Record<string, Tab> = {
+  rebano: 'herd',
+  produccion: 'production',
+  facturas: 'invoices',
+  informes: 'reports'
+};
+
+function pestañaInicial(): Tab {
+  /* Los accesos directos de Android llegan antes de iniciar sesión. Se lee la
+   * URL al montar esta pantalla, cuando la explotación ya está disponible. */
+  const seccion = new URLSearchParams(window.location.search).get('seccion');
+  return (seccion && pestañasPorEnlace[seccion]) || 'herd';
+}
+
 const tabs: { id: Tab; label: string; icon: typeof Leaf }[] = [
   { id: 'herd', label: 'Rebaño', icon: ClipboardList },
   { id: 'production', label: 'Producción', icon: TrendingUp },
@@ -63,7 +77,7 @@ export function AppShell({
     },
     error: { Icono: AlertTriangle, texto: 'Error al sincronizar', ayuda: 'Toca para reintentar.' }
   }[estadoNube];
-  const [tab, setTab] = useState<Tab>('herd'),
+  const [tab, setTab] = useState<Tab>(pestañaInicial),
     [settings, setSettings] = useState(false);
   const nav = (mobile: boolean) =>
     tabs.map(({ id, label, icon: Icon }) => (

@@ -13,16 +13,16 @@ Las dos cosas se arreglan conectando un SMTP propio.
 
 ## Paso 1 · Conectar Hostinger
 
-*Authentication → Emails → SMTP Settings → Enable custom SMTP*
+_Authentication → Emails → SMTP Settings → Enable custom SMTP_
 
-| Campo | Valor |
-|---|---|
-| Host | `smtp.hostinger.com` |
-| Port | `465` |
-| Username | la dirección completa del buzón, p. ej. `agro@agrovanza.es` |
-| Password | la del buzón |
-| Sender email | la misma dirección |
-| Sender name | `Chaparra` |
+| Campo        | Valor                                                       |
+| ------------ | ----------------------------------------------------------- |
+| Host         | `smtp.hostinger.com`                                        |
+| Port         | `465`                                                       |
+| Username     | la dirección completa del buzón, p. ej. `agro@agrovanza.es` |
+| Password     | la del buzón                                                |
+| Sender email | la misma dirección                                          |
+| Sender name  | `Chaparra`                                                  |
 
 Si el puerto 465 diera problemas, la alternativa es el `587` con STARTTLS.
 
@@ -37,8 +37,8 @@ buzón de persona.
 
 ## Paso 2 · Traducir las plantillas
 
-En cuanto el SMTP esté activo se desbloquea *Authentication → Emails →
-Templates*. `{{ .ConfirmationURL }}` es el enlace que genera Supabase; debe ir
+En cuanto el SMTP esté activo se desbloquea _Authentication → Emails →
+Templates_. `{{ .ConfirmationURL }}` es el enlace que genera Supabase; debe ir
 tal cual.
 
 ### Confirm sign up
@@ -82,7 +82,7 @@ como sospechoso, que es justo lo que se quería evitar.
 
 ## Estado actual
 
-- Site URL: `https://c4mar0n.github.io/chaparra/` ✅
+- Site URL: `https://chaparra.agrovanza.es/` ✅
 - URL de redirección permitida: la misma ✅
 - Confirmación de correo al registrarse: activada ✅
 - SMTP propio: **pendiente**

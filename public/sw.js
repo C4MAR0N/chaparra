@@ -2,9 +2,9 @@
  * Service worker de Chaparra.
  *
  * Objetivo: que la app siga abriéndose y funcionando en el campo, donde a menudo
- * no hay cobertura. No hay servidor ni sincronización: los datos del ganadero
- * viven en su dispositivo, así que basta con tener el esqueleto de la aplicación
- * disponible sin conexión.
+ * no hay cobertura. La copia local permite seguir trabajando y la sincronización
+ * con el servidor se reanuda al recuperar la conexión; para llegar hasta ahí, el
+ * esqueleto de la aplicación tiene que estar disponible sin red.
  *
  * Estrategias:
  *   - Navegación -> red primero, y si falla, el index.html cacheado.

@@ -46,28 +46,31 @@ Comprobado ejecutando la aplicación, no por lectura del código.
 | `apple-mobile-web-app-capable` | ✅ | Presente |
 | Borrado de cuenta **dentro** de la app | ✅ | `DeleteAccountModal`, con doble confirmación |
 | Compilación reproducible en CI | ✅ | Formato, pruebas y build en cada push |
-| **Web App Manifest** | ❌ | No existe. Sin él no hay PWA instalable ni TWA |
-| **Service worker / sin conexión** | ❌ | No existe. Requisito de instalabilidad y clave para Apple 4.2 |
-| **Iconos PNG 192 y 512, incluido maskable** | ❌ | Solo hay un SVG embebido como favicon |
-| **Política de privacidad en URL pública** | ❌ | Existe la pantalla dentro de la app, pero no una URL |
-| **URL web de solicitud de borrado de cuenta** | ❌ | Play la exige además del borrado en la app |
+| Web App Manifest | ✅ | `public/manifest.webmanifest`, con rutas relativas |
+| Service worker / sin conexión | ✅ | `public/sw.js`, escrito a mano y sin dependencias |
+| Iconos PNG 192 y 512, incluido maskable | ✅ | Más `apple-touch-icon` de 180 |
+| Política de privacidad en URL pública | ✅ | [/privacidad.html](https://c4mar0n.github.io/chaparra/privacidad.html) |
+| URL web de solicitud de borrado de cuenta | ✅ | [/borrar-cuenta.html](https://c4mar0n.github.io/chaparra/borrar-cuenta.html) |
 | Contraste de color AA | ⚠️ | No medido con herramienta; pendiente de auditoría formal |
+| Funcionalidad nativa para Apple 4.2 | ❌ | Sigue siendo el riesgo principal en iOS |
 
 ---
 
 ## 2. Lo que falta, por bloques
 
-### 2.1 Convertir Chaparra en PWA instalable *(bloquea Play)*
+### 2.1 PWA instalable — **hecho**
 
-1. `public/manifest.webmanifest` con `name`, `short_name`, `start_url`, `scope`,
-   `display: standalone`, `background_color`, `theme_color` y `orientation`.
-2. Iconos PNG de 192×192 y 512×512, más una variante `maskable` con margen de seguridad.
-3. Service worker que sirva el esqueleto de la aplicación sin conexión. Encaja especialmente
-   bien aquí: el ganadero usa la app en el campo, donde a menudo no hay cobertura.
-4. Enlazar el manifest desde `index.html`.
+Chaparra ya se instala desde el navegador y funciona sin cobertura:
 
-> Nota: el pliego original dejó PWA fuera de alcance de forma deliberada. Ese acuerdo se hizo
-> antes de plantear la publicación en tiendas; ahora es un requisito, no un extra.
+- `public/manifest.webmanifest` con `display: standalone`, colores de marca y rutas relativas,
+  para que funcione igual en local que bajo `/chaparra/`.
+- Iconos PNG de 192 y 512, variantes `maskable` con la marca dentro de la zona segura, y
+  `apple-touch-icon` de 180. Generados a partir de `public/icon.svg`, así que se pueden rehacer.
+- `public/sw.js`: red primero para la navegación, caché primero con revalidación en segundo plano
+  para estáticos y tipografías. Sin Workbox ni dependencias añadidas.
+
+> El pliego original dejó PWA fuera de alcance de forma deliberada. Ese acuerdo se tomó antes de
+> plantear la publicación en tiendas; al pasar a serlo, dejó de ser un extra.
 
 ### 2.2 Empaquetado
 
@@ -92,13 +95,22 @@ así que tanto el formulario de seguridad de datos de Play como las etiquetas de
 Apple se pueden rellenar como «no se recopilan datos». Es un argumento comercial además de
 un trámite.
 
-Lo que sí hay que producir:
+**Páginas publicadas — hecho:**
 
-- **Política de privacidad en una URL pública.** El contenido ya está redactado dentro de la
-  app; hay que publicarlo como página.
-- **URL de solicitud de borrado de cuenta.** Play lo exige a toda app que permita crear cuenta,
-  además del borrado dentro de la aplicación. En full enforcement desde el 15 de abril de 2024.
-- Declarar que no hay recopilación ni transmisión de datos personales.
+- [Política de privacidad](https://c4mar0n.github.io/chaparra/privacidad.html)
+- [Borrado de cuenta](https://c4mar0n.github.io/chaparra/borrar-cuenta.html) — Play lo exige a
+  toda app que permita crear cuenta, además del borrado dentro de la aplicación. En aplicación
+  plena desde el 15 de abril de 2024.
+
+Ambas declaran el contacto `agro@agrovanza.es` y describen con precisión las dos únicas
+conexiones a terceros que existen: **Google Fonts** (la tipografía se descarga de Google, que ve
+la IP) y **GitHub Pages** (el alojamiento registra la IP, como cualquier servidor web). Ninguna
+recibe datos de la explotación.
+
+> **Mejora pendiente que merece la pena:** alojar la tipografía en el propio dominio elimina la
+> única conexión a Google y permite afirmar sin matices que no sale nada del dispositivo. Además
+> la app cargaría antes y sin conexión se vería con su tipografía real. Es trabajo de poco más de
+> un rato y refuerza justo el argumento de venta de Chaparra.
 
 ### 2.5 Cuentas, costes y plazos
 
@@ -119,16 +131,19 @@ ahorra semanas.
 
 ## 3. Camino recomendado
 
-1. **PWA primero.** Manifest, iconos y service worker. Con eso Chaparra se instala en el
-   móvil desde el navegador —icono en la pantalla de inicio, pantalla completa, sin conexión—
-   sin tienda, sin cuotas y sin revisión. Para un puñado de ganaderos, esto puede ser todo
-   lo que se necesita.
-2. **Publicar la política de privacidad y la página de borrado de cuenta.** Trámite barato que
-   desbloquea el resto.
-3. **Android vía TWA.** Con la PWA lista, el empaquetado es cuestión de horas. Contar con el
-   plazo de los 12 probadores si la cuenta es personal.
-4. **iOS al final**, y solo si compensa: 99 USD al año, un Mac y el riesgo real de la
-   directriz 4.2. Antes de enviar, añadir funcionalidad nativa de verdad.
+1. ~~**PWA primero.**~~ **Hecho.** Chaparra se instala desde el navegador —icono en la pantalla
+   de inicio, pantalla completa, funcionando sin cobertura— sin tienda, sin cuotas y sin
+   revisión. Para empezar con un grupo de ganaderos, esto puede ser suficiente: se comparte un
+   enlace y listo.
+2. ~~**Política de privacidad y página de borrado de cuenta.**~~ **Hecho.**
+3. **Probarlo con ganaderos reales antes de pagar nada.** Instalando la PWA se recoge el mismo
+   aprendizaje que con una app de tienda, sin cuotas ni tiempos de revisión. Si el producto no
+   encaja, es mejor descubrirlo aquí.
+4. **Android vía TWA**, cuando el producto esté asentado. El empaquetado es cuestión de horas.
+   Contar con el plazo de los 12 probadores si la cuenta de Play es personal.
+5. **iOS al final**, y solo si compensa: 99 USD al año, un Mac y el riesgo real de la
+   directriz 4.2. Antes de enviar hay que añadir funcionalidad nativa de verdad —cámara para las
+   facturas, notificaciones de tareas sanitarias, biometría—, no basta con empaquetar la web.
 
 ---
 

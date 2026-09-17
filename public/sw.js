@@ -23,13 +23,48 @@ const INDEX = new URL('./', self.location).href;
 
 const ORIGENES_FUENTES = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
 
+/*
+ * En la primera visita el service worker se activa cuando el navegador ya ha
+ * pedido el JS y el CSS, así que esas peticiones no pasan por él y no se
+ * cachean. Si el ganadero abriera la app y se quedara sin cobertura antes de
+ * volver a entrar, no arrancaría.
+ *
+ * Para evitarlo, al instalar se lee el index.html y se precargan los recursos
+ * que declara. Así no hace falta conocer los nombres con hash que genera Vite
+ * ni generar una lista en tiempo de compilación.
+ */
+async function precargarRecursosDelIndice(html) {
+  const cache = await caches.open(ASSETS);
+  const urls = new Set();
+  for (const [, ruta] of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
+    if (/^(https?:)?\/\//.test(ruta) || ruta.startsWith('data:')) continue;
+    const url = new URL(ruta, INDEX);
+    if (url.origin === self.location.origin) urls.add(url.href);
+  }
+  await Promise.all(
+    [...urls].map(url =>
+      cache.add(new Request(url, { cache: 'reload' })).catch(() => {
+        /* Un recurso que falle no debe impedir la instalación. */
+      })
+    )
+  );
+}
+
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches
-      .open(SHELL)
-      .then(cache => cache.add(new Request(INDEX, { cache: 'reload' })))
-      .then(() => self.skipWaiting())
-      .catch(() => self.skipWaiting())
+    (async () => {
+      try {
+        const res = await fetch(new Request(INDEX, { cache: 'reload' }));
+        if (res.ok) {
+          const html = await res.clone().text();
+          await (await caches.open(SHELL)).put(INDEX, res);
+          await precargarRecursosDelIndice(html);
+        }
+      } catch {
+        /* Sin conexión durante la instalación: se cacheará sobre la marcha. */
+      }
+      await self.skipWaiting();
+    })()
   );
 });
 

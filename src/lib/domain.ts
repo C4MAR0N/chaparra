@@ -80,3 +80,24 @@ export function accumulatedCost(animal: Animal) {
     animal.historialSanitario.reduce((sum, r) => sum + r.costeEuro, 0)
   );
 }
+
+/*
+ * La madre de un animal no se guarda en su ficha: es la relación `criasAsociadas`
+ * vista del revés. Guardarla en los dos sitios permitiría que se contradijeran.
+ *
+ * Esta función deja a `cria` colgando de una sola madre: la quita de la lista de
+ * crías de cualquier otro animal y la añade a la elegida. Con `madre` vacío, la
+ * cría queda sin madre asignada.
+ */
+export function aplicarMadre(animals: Animal[], cria: string, madre: string): Animal[] {
+  return animals.map(a => {
+    if (a.id === cria) return a;
+    const sinEsta = a.criasAsociadas.filter(id => id !== cria);
+    const siguientes = a.id === madre ? [...sinEsta, cria] : sinEsta;
+    return siguientes.length === a.criasAsociadas.length ? a : { ...a, criasAsociadas: siguientes };
+  });
+}
+
+/** Devuelve la madre de un animal, si alguna lo tiene entre sus crías. */
+export const madreDe = (animals: Animal[], cria: string) =>
+  animals.find(a => a.criasAsociadas.includes(cria));

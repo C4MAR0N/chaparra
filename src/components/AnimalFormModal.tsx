@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import type { Animal, Especie, EstadoSanitario, Orientacion, SexoAnimal } from '../types';
 import { useFarm } from '../context/FarmContext';
 import { ESTADOS, especieLabel } from '../lib/constants';
-import { animalMeat, hasMeat, hasMilk, today, uid } from '../lib/domain';
+import { animalMeat, aplicarMadre, hasMeat, hasMilk, madreDe, today, uid } from '../lib/domain';
 import { nonnegative, validDate } from '../lib/validation';
 import { Banner, Button, Field, Input, Modal, Select, Textarea } from './ui';
 export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClose: () => void }) {
@@ -41,7 +41,34 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
   );
   const [errors, setErrors] = useState<Record<string, string>>({}),
     [child, setChild] = useState('');
+  /*
+   * La madre no se guarda en la ficha de la cría: es la misma relación que
+   * `criasAsociadas`, vista del revés. Guardarla en los dos sitios permitiría
+   * que se contradijeran, así que aquí solo se edita y al guardar se actualiza
+   * la lista de crías de la madre correspondiente.
+   */
+  const [madre, setMadre] = useState(() => madreDe(data.animals, initial?.id ?? '')?.id ?? '');
   const patch = (values: Partial<Animal>) => setDraft({ ...draft, ...values });
+  const madreElegida = data.animals.find(a => a.id === madre);
+  const madresPosibles = data.animals
+    .filter(
+      a =>
+        a.id !== draft.id &&
+        // La madre ya asignada se mantiene aunque deje de encajar en el filtro
+        // (por ejemplo al cambiar la especie), para no perderla en silencio.
+        (a.id === madre ||
+          (a.sexo === 'Hembra' &&
+            a.especie === draft.especie &&
+            // Evita ciclos: una cría de este animal no puede ser además su madre.
+            !draft.criasAsociadas.includes(a.id)))
+    )
+    .sort((a, b) => a.crotal.localeCompare(b.crotal));
+  const madreDudosa = Boolean(
+    madreElegida &&
+    draft.fechaNacimiento &&
+    madreElegida.fechaNacimiento &&
+    madreElegida.fechaNacimiento >= draft.fechaNacimiento
+  );
   const species = [...farm.especies.filter(s => s !== 'Otro'), 'Otro'] as Especie[];
   if (initial && !species.includes(initial.especie)) species.unshift(initial.especie);
   const orientations: Orientacion[] =
@@ -97,9 +124,13 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
       animalMeat(saved, farm) && saved.pesoKg !== undefined && saved.pesoKg !== initial?.pesoKg;
     update(current => ({
       ...current,
-      animals: initial
-        ? current.animals.map(a => (a.id === saved.id ? saved : a))
-        : [saved, ...current.animals],
+      animals: aplicarMadre(
+        initial
+          ? current.animals.map(a => (a.id === saved.id ? saved : a))
+          : [saved, ...current.animals],
+        saved.id,
+        madre
+      ),
       weightRecords: weightChanged
         ? [
             ...current.weightRecords.filter(r => !(r.animalId === saved.id && r.fecha === today())),
@@ -184,6 +215,24 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
               onChange={e => patch({ fechaNacimiento: e.target.value })}
               required
             />
+          </Field>
+          <Field
+            label="Madre"
+            help={
+              madreDudosa
+                ? 'Aviso: esa hembra no consta como nacida antes que esta cría. Revísalo.'
+                : 'Solo hembras de la misma especie. Queda vinculada en ambas fichas.'
+            }
+          >
+            <Select value={madre} onChange={e => setMadre(e.target.value)}>
+              <option value="">Sin indicar</option>
+              {madresPosibles.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.crotal}
+                  {a.raza ? ` · ${a.raza}` : ''}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label="Ubicación">
             <Input value={draft.ubicacion} onChange={e => patch({ ubicacion: e.target.value })} />

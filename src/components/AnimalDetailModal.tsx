@@ -9,6 +9,7 @@ import {
   animalMilk,
   dateLabel,
   euro,
+  madreDe,
   number,
   today,
   uid,
@@ -39,6 +40,8 @@ export function AnimalDetailModal({
   onSelect: (id: string) => void;
 }) {
   const { data, farm, update, notify } = useFarm();
+  // La madre es quien tiene a este animal entre sus crías: una sola relación.
+  const madre = madreDe(data.animals, animal.id);
   const [deleting, setDeleting] = useState(false),
     [baja, setBaja] = useState(false),
     [healthOpen, setHealthOpen] = useState(false);
@@ -149,7 +152,24 @@ export function AnimalDetailModal({
         )}
       </div>
       <section className="space-y-3">
-        <h3 className="section-heading">Crías asociadas</h3>
+        <h3 className="section-heading">Parentesco</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-stone-600">Madre:</span>
+          {madre ? (
+            <Button
+              variant="secondary"
+              className="tracking-tight"
+              onClick={() => onSelect(madre.id)}
+            >
+              {madre.crotal}
+            </Button>
+          ) : (
+            <span className="text-sm text-stone-600">
+              Sin indicar. Puedes asignarla al editar la ficha.
+            </span>
+          )}
+        </div>
+        <p className="text-sm font-semibold text-stone-600">Crías:</p>
         {animal.criasAsociadas.length ? (
           <div className="flex flex-wrap gap-2">
             {animal.criasAsociadas.map(id => {

@@ -19,6 +19,11 @@ const crotalPorId = (data: FarmData) => {
 };
 
 function hojaRebano(data: FarmData, farm: FarmProfile): Sheet {
+  // La madre se deduce de quién tiene al animal entre sus crías.
+  const madres = new Map<string, string>();
+  for (const posible of data.animals) {
+    for (const cria of posible.criasAsociadas) madres.set(cria, posible.crotal);
+  }
   const leche = hasMilk(farm);
   const carne = hasMeat(farm);
 
@@ -27,6 +32,7 @@ function hojaRebano(data: FarmData, farm: FarmProfile): Sheet {
     { header: 'Especie', type: 'text' },
     { header: 'Raza', type: 'text' },
     { header: 'Sexo', type: 'text' },
+    { header: 'Madre', type: 'text' },
     { header: 'Fecha de nacimiento', type: 'date' },
     { header: 'Edad', type: 'text' },
     { header: 'Ubicación', type: 'text' },
@@ -50,6 +56,7 @@ function hojaRebano(data: FarmData, farm: FarmProfile): Sheet {
     especieLabel(animal.especie),
     animal.raza,
     animal.sexo,
+    madres.get(animal.id) ?? null,
     animal.fechaNacimiento,
     age(animal.fechaNacimiento),
     animal.ubicacion,

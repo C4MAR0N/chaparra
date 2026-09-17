@@ -34,10 +34,9 @@ jobs:
       - name: Pruebas
         run: npm test
 
+      # Con dominio propio la app cuelga de la raiz, no de /chaparra/
       - name: Compilar
         run: npm run build
-        env:
-          VITE_BASE_PATH: /chaparra/
 
       - uses: actions/configure-pages@v5
 

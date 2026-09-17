@@ -141,3 +141,28 @@ export async function usuarioActual(): Promise<UserRecord | null> {
   }
   return currentUser();
 }
+
+/*
+ * Resultado de cerrar la cuenta en el servidor:
+ *   'completo' -> no queda nada, ni datos ni acceso
+ *   'datos'    -> la explotacion se ha borrado, la ficha de acceso sigue
+ *   'local'    -> esta cuenta nunca estuvo en el servidor
+ */
+export type BorradoEnNube = 'completo' | 'datos' | 'local';
+
+/**
+ * Borra la explotación y la cuenta del servidor. La función del servidor solo
+ * puede borrar a quien la llama: no recibe ningún identificador, lo saca del
+ * token de la sesión.
+ */
+export async function borrarCuentaEnLaNube(): Promise<BorradoEnNube> {
+  if (!nube) return 'local';
+  const { data: sesion } = await nube.auth.getSession();
+  if (!sesion.session) return 'local';
+  const { data, error } = await nube.rpc('borrar_mi_cuenta');
+  if (error) throw new Error(mensajeDeError(error));
+  // Con la cuenta borrada el token ya no vale para nada; cerrar la sesión aquí
+  // evita que la aplicación siga intentando sincronizar contra un hueco.
+  await nube.auth.signOut({ scope: 'local' }).catch(() => undefined);
+  return data === 'completo' ? 'completo' : 'datos';
+}

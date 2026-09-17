@@ -30,6 +30,9 @@ export function FarmProvider({ user, children }: { user: UserRecord; children: R
   const current = useRef(data);
   const metas = useRef(leerMetas(user.id));
   const sincronizando = useRef(false);
+  const pendiente = useRef<ReturnType<typeof setTimeout>>();
+  // Referencia para poder llamar desde `update` sin crearlo antes de tiempo.
+  const sincronizarRef = useRef<() => void>(() => {});
   const [estadoNube, setEstadoNube] = useState<EstadoNube>(hayNube ? 'al-dia' : 'inactiva');
   const [notice, notify] = useState('');
   const update = useCallback(
@@ -47,6 +50,15 @@ export function FarmProvider({ user, children }: { user: UserRecord; children: R
       }
       current.current = next;
       setData(next);
+      /*
+       * Sincronizar tras el cambio, con un respiro para no lanzar una petición
+       * por tecla. Sin esto, dar de alta un animal y cerrar la app dejaba el
+       * dato sin subir hasta la siguiente vez que se abriera.
+       */
+      if (hayNube) {
+        clearTimeout(pendiente.current);
+        pendiente.current = setTimeout(() => sincronizarRef.current(), 2500);
+      }
     },
     [user.id]
   );
@@ -79,6 +91,12 @@ export function FarmProvider({ user, children }: { user: UserRecord; children: R
         sincronizando.current = false;
       });
   }, [user.id]);
+
+  useEffect(() => {
+    sincronizarRef.current = sincronizarAhora;
+  }, [sincronizarAhora]);
+
+  useEffect(() => () => clearTimeout(pendiente.current), []);
 
   useEffect(() => {
     if (!hayNube) return;

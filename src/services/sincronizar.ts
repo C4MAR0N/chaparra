@@ -91,11 +91,20 @@ export async function sincronizar(data: FarmData, metas: Metas): Promise<Resulta
     const locales = aplanar(data, metas);
     const { aplicar, subir, conflictos } = fusionar(locales, remotos);
 
-    if (subir.length) {
+    /*
+     * Se sube por tandas. Una explotación entera son cientos de registros y las
+     * facturas llevan fotos: mandarlo todo en una sola petición acabaría dando
+     * un error de tamaño justo cuando más datos hay que salvar. Además, si algo
+     * falla a mitad, lo ya subido queda guardado y la siguiente pasada
+     * continúa por donde se quedó.
+     */
+    const TANDA = 50;
+    for (let i = 0; i < subir.length; i += TANDA) {
+      const tanda = subir.slice(i, i + TANDA);
       const { data: escritos, error: errorSubida } = await nube
         .from('registros')
         .upsert(
-          subir.map(r => ({
+          tanda.map(r => ({
             user_id: usuario.id,
             tipo: r.tipo,
             id: r.id,
@@ -113,6 +122,8 @@ export async function sincronizar(data: FarmData, metas: Metas): Promise<Resulta
           [`${e.tipo}:${e.id}`]: { actualizado: e.actualizado, borrado: e.borrado }
         };
       }
+      // Se guarda tanda a tanda para no perder el avance si se corta la conexión.
+      guardarMetas(usuario.id, metas);
     }
 
     let siguienteDatos = data;

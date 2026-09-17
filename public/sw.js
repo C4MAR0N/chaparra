@@ -10,6 +10,7 @@
  *   - Navegación -> red primero, y si falla, el index.html cacheado.
  *   - Estáticos  -> caché primero, revalidando en segundo plano. Incluye la
  *                   tipografía, que se sirve desde este mismo dominio.
+ *   - Lector OCR -> caché primero y sin revalidar: son megas que no cambian.
  *   - Resto      -> se deja pasar sin tocar.
  */
 
@@ -76,10 +77,11 @@ self.addEventListener('activate', event => {
   );
 });
 
-async function cachePrimero(request, nombreCache) {
+async function cachePrimero(request, nombreCache, revalidar = true) {
   const cache = await caches.open(nombreCache);
   const guardado = await cache.match(request);
   if (guardado) {
+    if (!revalidar) return guardado;
     // Revalida en segundo plano sin bloquear la respuesta.
     fetch(request)
       .then(res => res.ok && cache.put(request, res.clone()))
@@ -116,6 +118,12 @@ self.addEventListener('fetch', event => {
   }
 
   if (url.origin === self.location.origin) {
-    event.respondWith(cachePrimero(request, ASSETS));
+    /*
+     * El lector de facturas son varios megas de motor y diccionario que nunca
+     * cambian de contenido. Revalidarlos en cada uso sería volver a bajarlos
+     * entero cada vez, así que una vez guardados no se vuelven a pedir.
+     */
+    const inmutable = url.pathname.includes('/ocr/');
+    event.respondWith(cachePrimero(request, ASSETS, !inmutable));
   }
 });

@@ -114,9 +114,10 @@
     <main class="contenedor">
       <div class="destacado">
         <p>
-          <strong>En una frase:</strong> Chaparra guarda todo lo que registras en el navegador de
-          tu propio dispositivo. No tenemos servidores con tus datos, no los vemos, no los
-          compartimos y no los vendemos.
+          <strong>En una frase:</strong> Chaparra guarda lo que registras en tu propio
+          dispositivo y, para que puedas entrar desde el m&oacute;vil y desde el ordenador,
+          tambi&eacute;n en tu cuenta de un servidor europeo. No los vemos, no los compartimos y no
+          los vendemos.
         </p>
       </div>
 
@@ -143,26 +144,36 @@
           crotales, registros sanitarios, producción, facturas y las imágenes que adjuntes.
         </li>
       </ul>
+      <p>Todo ello se guarda en <strong>dos sitios</strong>:</p>
+      <ul>
+        <li>
+          En el <strong>almacenamiento local del navegador</strong> de cada dispositivo donde
+          entres. Por eso la aplicaci&oacute;n sigue funcionando en el campo sin cobertura.
+        </li>
+        <li>
+          En <strong>tu cuenta del servidor</strong>, para que lo que apuntes en el m&oacute;vil
+          aparezca tambi&eacute;n en el ordenador. El servidor es <strong>Supabase</strong>, con la
+          base de datos alojada en Irlanda (Amazon Web Services, regi&oacute;n
+          <code>eu-west-1</code>), dentro de la Uni&oacute;n Europea.
+        </li>
+      </ul>
       <p>
-        <strong
-          >Todo ello se guarda exclusivamente en el almacenamiento local del navegador de tu
-          dispositivo.</strong
-        >
-        No se envía a ningún servidor nuestro, porque no existe tal servidor. Nadie más que quien
-        use ese dispositivo puede acceder a esa información.
+        El servidor aplica <strong>seguridad a nivel de fila</strong>: una consulta solo puede
+        devolver las filas del usuario que ha iniciado sesi&oacute;n. Nadie que no seas t&uacute;
+        puede leer tu explotaci&oacute;n a trav&eacute;s de la aplicaci&oacute;n.
       </p>
 
       <h2>3. Qué implica esto para ti</h2>
       <ul>
         <li>
-          <strong>No hay copia de seguridad en la nube.</strong> Si borras los datos del navegador,
-          desinstalas la aplicación o pierdes el dispositivo, la información se pierde. Por eso
-          existe la opción «Copia de seguridad» dentro de la app, que exporta todo a un archivo
-          JSON. Úsala con regularidad.
+          <strong>Tus datos viajan contigo.</strong> Al entrar con tu cuenta en otro dispositivo, la
+          explotaci&oacute;n aparece all&iacute;. Aun as&iacute;, conviene descargar de vez en cuando
+          la copia de seguridad desde &laquo;Ajustes y cuenta&raquo;: una copia propia nunca sobra.
         </li>
         <li>
-          <strong>No hay sincronización entre dispositivos.</strong> Lo que registres en el móvil no
-          aparecerá en el ordenador salvo que exportes e importes el archivo de copia.
+          <strong>Un borrado se propaga.</strong> Si eliminas un animal o una factura en un
+          dispositivo, desaparece tambi&eacute;n en los dem&aacute;s. No es un fallo: es lo que
+          significa tener una sola explotaci&oacute;n en varios sitios.
         </li>
         <li>
           <strong>Los datos de la explotación no están cifrados.</strong> Solo la contraseña pasa
@@ -171,28 +182,46 @@
           y cierra sesión si lo compartes.
         </li>
         <li>
-          <strong>Si olvidas la contraseña no se puede recuperar.</strong> Al no haber servidor, no
-          existe un mecanismo de restablecimiento por correo. La única salida es borrar la cuenta y
-          empezar de nuevo.
+          <strong>Si olvidas la contrase&ntilde;a</strong>, puedes pedir un enlace de cambio desde la
+          pantalla de acceso. Llega al correo con el que te registraste.
         </li>
       </ul>
 
       <h2>4. Conexiones a terceros</h2>
       <p>
-        La aplicación <strong>no carga ningún recurso de terceros</strong>. La tipografía se sirve
-        desde este mismo dominio, no desde Google Fonts, de modo que usar Chaparra no comunica tu
-        dirección IP a ninguna otra empresa.
+        La aplicaci&oacute;n <strong>no carga tipograf&iacute;as, anal&iacute;ticas ni recursos de
+        terceros en sus pantallas</strong>: la fuente se sirve desde este mismo dominio, no desde
+        Google Fonts. Estos son todos los servicios con los que se comunica, y para qu&eacute;:
       </p>
-      <p>Queda una única salvedad, y es la propia de cualquier página web:</p>
       <ul>
         <li>
-          <strong>Alojamiento.</strong> Los archivos de la aplicación se sirven desde GitHub Pages.
-          Como cualquier servidor web, GitHub puede registrar la dirección IP y la hora de la
-          petición con fines técnicos y de seguridad. No recibe ningún dato de tu explotación.
-          Además, una vez instalada la aplicación en el móvil, funciona sin conexión y deja de
-          hacer peticiones mientras la usas.
+          <strong>GitHub Pages</strong> (alojamiento). Sirve los archivos de la aplicaci&oacute;n.
+          Como cualquier servidor web puede registrar la direcci&oacute;n IP y la hora de la
+          petici&oacute;n con fines t&eacute;cnicos y de seguridad. No recibe ning&uacute;n dato de
+          tu explotaci&oacute;n.
+        </li>
+        <li>
+          <strong>Supabase</strong> (cuenta y datos). Guarda tu cuenta y tu explotaci&oacute;n en
+          Irlanda, dentro de la Uni&oacute;n Europea, como se explica en el apartado 2.
+        </li>
+        <li>
+          <strong>AEMET y Open-Meteo</strong> (previsi&oacute;n del tiempo). Al mostrar el tiempo se
+          env&iacute;a el <strong>municipio o sus coordenadas</strong>, y nada m&aacute;s. No viaja
+          ning&uacute;n dato tuyo ni de tus animales. Si no eliges municipio en Ajustes, no se
+          consulta nada.
+        </li>
+        <li>
+          <strong>Hostinger</strong> (correo). Env&iacute;a los correos de confirmaci&oacute;n de
+          cuenta y de cambio de contrase&ntilde;a. Recibe tu direcci&oacute;n de correo.
         </li>
       </ul>
+      <p>
+        <strong>Leer una factura no sube nada.</strong> El bot&oacute;n &laquo;Rellenar desde el
+        justificante&raquo; abre el PDF o la foto <strong>dentro de tu propio dispositivo</strong>
+        para proponerte el importe, la fecha y el proveedor. Ni la imagen ni el texto salen de
+        &eacute;l. La primera vez que se lee una foto se descarga el lector desde este mismo
+        dominio; despu&eacute;s funciona tambi&eacute;n sin conexi&oacute;n.
+      </p>
       <p>
         <strong>No usamos</strong> cookies de seguimiento, herramientas de analítica, píxeles
         publicitarios, redes sociales ni servicios de terceros que perfilen a los usuarios.
@@ -207,9 +236,9 @@
       <h2>6. Tus derechos</h2>
       <p>
         El Reglamento General de Protección de Datos te reconoce los derechos de acceso,
-        rectificación, supresión, limitación, portabilidad y oposición. En la práctica, como los
-        datos están en tu dispositivo y bajo tu control exclusivo, puedes ejercerlos tú mismo en
-        cualquier momento:
+        rectificaci&oacute;n, supresi&oacute;n, limitaci&oacute;n, portabilidad y oposici&oacute;n.
+        En la pr&aacute;ctica, como los datos son tuyos y est&aacute;n bajo tu control, puedes
+        ejercerlos t&uacute; mismo en cualquier momento:
       </p>
       <ul>
         <li><strong>Acceso y rectificación:</strong> desde la propia aplicación.</li>
@@ -220,8 +249,9 @@
           aplicación. Ambos son formatos abiertos.
         </li>
         <li>
-          <strong>Supresión:</strong> «Ajustes y cuenta → Eliminar cuenta» borra la cuenta y todos
-          sus datos de forma inmediata e irreversible. Más detalle en la
+          <strong>Supresi&oacute;n:</strong> &laquo;Ajustes y cuenta &rarr; Eliminar cuenta&raquo;
+          borra la cuenta y todos sus datos, en el dispositivo y en el servidor, de forma inmediata
+          e irreversible. Más detalle en la
           <a href="borrar-cuenta.html">página de borrado de cuenta</a>.
         </li>
       </ul>

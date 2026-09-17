@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { ExternalLink, FileText, Paperclip, Plus, Trash2 } from 'lucide-react';
+import { ExternalLink, FileText, Paperclip, Plus, Trash2, Wand2 } from 'lucide-react';
 import type { InvoiceCategory, InvoiceDoc, SaleInvoiceTemplate } from '../types';
 import { useFarm } from '../context/FarmContext';
 import { CATEGORIAS } from '../lib/constants';
 import { dateLabel, euro, hasMilk, today, uid } from '../lib/domain';
 import { abrirAdjunto, esPdf, prepararAdjunto } from '../services/images';
+import { interpretarFactura } from '../lib/factura';
 import {
   Badge,
   Banner,
@@ -245,13 +246,63 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
     [image, setImage] = useState<string | undefined>(),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
+  const [leyendo, setLeyendo] = useState(''),
+    [lectura, setLectura] = useState(''),
+    /* Lo último que propuso la lectura. Sirve para distinguir un concepto que
+     * escribió la persona —que no se toca— de uno que pusimos nosotros, que sí
+     * se sustituye: si no, al cambiar de justificante quedaba en el formulario
+     * el proveedor de la factura anterior. */
+    [propuesto, setPropuesto] = useState('');
   const categories = CATEGORIAS.filter(c => hasMilk(farm) || c !== 'Venta Leche');
+
+  /*
+   * Leer el justificante y PROPONER los campos. Nada se guarda solo: un importe
+   * mal leído por una coma descuadra las cuentas sin que nadie se entere, así
+   * que lo que sale de aquí se rellena en el formulario y lo confirma la persona.
+   */
+  async function rellenarDesdeElJustificante() {
+    if (!image) return;
+    setError('');
+    setLectura('');
+    setLeyendo('Abriendo el justificante…');
+    try {
+      const { leerJustificante } = await import('../services/lectura');
+      const texto = await leerJustificante(image, setLeyendo);
+      const s = interpretarFactura(texto);
+      if (!s.encontrados.length) {
+        setLectura('');
+        setError('No se ha podido sacar nada en claro del justificante. Escribe los datos a mano.');
+        return;
+      }
+      if (s.importeTotalEuro !== undefined) setAmount(String(s.importeTotalEuro));
+      if (s.fecha) setFecha(s.fecha);
+      if (s.proveedor) setParty(s.proveedor);
+      if (s.titulo && (!title.trim() || title === propuesto)) {
+        setTitle(s.titulo);
+        setPropuesto(s.titulo);
+      }
+      if (s.categoria && categories.includes(s.categoria)) setCategory(s.categoria);
+      if (s.tipo) setType(s.tipo);
+      const falta = ['el importe', 'la fecha', 'el proveedor'].filter(
+        c => !s.encontrados.includes(c)
+      );
+      setLectura(
+        `Se ha leído ${s.encontrados.join(', ')}. Revísalo antes de guardar` +
+          (falta.length ? `; no se ha encontrado ${falta.join(' ni ')}.` : '.')
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se ha podido leer el justificante.');
+    } finally {
+      setLeyendo('');
+    }
+  }
   async function upload(file: File | undefined) {
     if (!file) return;
     setBusy(true);
     setError('');
     try {
       setImage(await prepararAdjunto(file));
+      setLectura('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se ha podido cargar el justificante.');
     } finally {
@@ -367,9 +418,32 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
                 className="h-40 w-full rounded-xl border border-stone-200 object-contain"
               />
             )}
-            <Button variant="ghost" onClick={() => setImage(undefined)}>
-              Quitar justificante
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => void rellenarDesdeElJustificante()}
+                loading={!!leyendo}
+              >
+                <Wand2 size={18} />
+                Rellenar desde el justificante
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setImage(undefined);
+                  setLectura('');
+                }}
+              >
+                Quitar justificante
+              </Button>
+            </div>
+            {leyendo && (
+              <p role="status" className="text-sm text-stone-600">
+                {leyendo} La primera vez que se lee una foto hay que descargar el lector; tarda un
+                poco.
+              </p>
+            )}
+            {lectura && <Banner tone="success">{lectura}</Banner>}
           </div>
         )}
         {busy && (

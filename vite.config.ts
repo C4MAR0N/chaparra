@@ -19,6 +19,12 @@ export default defineConfig({
           if (!id.includes('node_modules')) return;
           if (/[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react';
           if (id.includes('recharts')) return 'charts';
+          /*
+           * El lector de facturas va aparte y no cuelga de `vendor`: si cayera
+           * ahí, medio mega de pdf.js se descargaría al abrir la aplicación
+           * aunque nadie fuera a leer ninguna factura.
+           */
+          if (/[\\/](pdfjs-dist|tesseract\.js)[\\/]/.test(id)) return 'lector';
           return 'vendor';
         }
       }

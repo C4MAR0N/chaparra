@@ -11,18 +11,44 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 export function getUsers(): UserRecord[] {
   const raw = readJson(USERS_KEY);
   if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (u: unknown): u is UserRecord =>
-      isObject(u) &&
-      typeof u.id === 'string' &&
-      typeof u.email === 'string' &&
-      typeof u.nombre === 'string' &&
+  return raw.filter((u: unknown): u is UserRecord => {
+    if (
+      !isObject(u) ||
+      typeof u.id !== 'string' ||
+      typeof u.email !== 'string' ||
+      typeof u.nombre !== 'string' ||
+      typeof u.createdAt !== 'string'
+    )
+      return false;
+    // Las cuentas de la nube no guardan contraseña aquí: la identidad es del servidor.
+    if (u.origen === 'nube') return true;
+    return (
       typeof u.passwordHash === 'string' &&
       typeof u.salt === 'string' &&
       u.iterations === ITERATIONS &&
-      u.algo === 'PBKDF2-SHA-256' &&
-      typeof u.createdAt === 'string'
-  );
+      u.algo === 'PBKDF2-SHA-256'
+    );
+  });
+}
+
+/**
+ * Crea o actualiza la ficha local de una cuenta de la nube. El identificador es
+ * el mismo que en el servidor, de modo que los datos guardados en el dispositivo
+ * y los del servidor comparten espacio sin traducción de por medio.
+ */
+export function adoptarUsuarioDeNube(id: string, email: string, nombre: string): UserRecord {
+  const users = getUsers();
+  const previo = users.find(u => u.id === id);
+  const usuario: UserRecord = {
+    ...previo,
+    id,
+    email: normalizeEmail(email),
+    nombre: nombre.trim() || previo?.nombre || normalizeEmail(email),
+    origen: 'nube',
+    createdAt: previo?.createdAt ?? new Date().toISOString()
+  };
+  writeJson(USERS_KEY, previo ? users.map(u => (u.id === id ? usuario : u)) : [...users, usuario]);
+  return usuario;
 }
 async function derive(password: string, salt: Uint8Array, iterations: number) {
   if (!globalThis.crypto?.subtle)
@@ -54,6 +80,8 @@ async function credentials(password: string) {
   };
 }
 export async function verifyPassword(user: UserRecord, password: string) {
+  // Una cuenta de la nube no tiene contraseña guardada aquí: nunca valida por esta vía.
+  if (!user.passwordHash || !user.salt || !user.iterations) return false;
   try {
     const actual = bytes(await derive(password, bytes(user.salt), user.iterations));
     const expected = bytes(user.passwordHash);
@@ -125,6 +153,10 @@ export async function login(email: string, password: string, remember: boolean) 
       'En este navegador todavía no hay ninguna cuenta. Las cuentas de Chaparra no se comparten entre dispositivos: crea una aquí y luego restaura tu copia de seguridad desde Ajustes.'
     );
   const user = users.find(u => u.email === normalizeEmail(email));
+  if (user?.origen === 'nube')
+    throw new Error(
+      'Esta cuenta se gestiona en el servidor. Entra con el acceso normal, que ya sincroniza entre dispositivos.'
+    );
   if (!user || !(await verifyPassword(user, password)))
     throw new Error('Correo o contraseña incorrectos');
   startSession(user.id, remember);

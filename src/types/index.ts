@@ -7,10 +7,17 @@ export interface UserRecord {
   id: string;
   nombre: string;
   email: string;
-  passwordHash: string;
-  salt: string;
-  iterations: number;
-  algo: 'PBKDF2-SHA-256';
+  /*
+   * Las cuentas de la nube no guardan contraseña en el dispositivo: la
+   * identidad la lleva Supabase y aquí solo queda la sesión. Por eso estos
+   * campos son opcionales y solo los tienen las cuentas locales antiguas.
+   */
+  passwordHash?: string;
+  salt?: string;
+  iterations?: number;
+  algo?: 'PBKDF2-SHA-256';
+  /** 'nube' si la identidad la gestiona el servidor. */
+  origen?: 'local' | 'nube';
   createdAt: string;
   onboardingCompletedAt?: string;
 }

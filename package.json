@@ -12,7 +12,7 @@
     "check:dev": "node scripts/check-dev.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,js,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.{ts,js,json}\"",
-    "capturas": "npm run build && node scripts/capturas.mjs"
+    "capturas": "npm run build && node scripts/capturas.mjs && node scripts/grafico-destacado.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

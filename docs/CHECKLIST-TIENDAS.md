@@ -66,6 +66,10 @@ proceden de la auditoría automatizada, que no disponía de uno.
 
 ## App Store
 
+**Fuera de alcance.** Se ha decidido no publicar en la App Store por coste: 99 $ al año más el
+trabajo nativo que exige la directriz 4.2. El plan queda escrito en [`APP-STORE.md`](./APP-STORE.md)
+por si se retoma. Lo que sigue describe lo que haría falta ese día, no tareas pendientes de hoy.
+
 | Requisito                                       | Estado | Detalle                                                                                          |
 | ----------------------------------------------- | -----: | ------------------------------------------------------------------------------------------------ |
 | Aplicación iOS nativa                           |     ❌ | No existe todavía un proyecto Xcode/Capacitor que se pueda archivar                              |

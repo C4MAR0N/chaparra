@@ -1,24 +1,8 @@
-/*
- * Capturas para las fichas de Google Play y la App Store.
- *
- * Las tiendas exigen píxeles exactos, así que no vale recortar una ventana a
- * ojo: se conduce un Chrome sin interfaz por el protocolo de DevTools, que
- * permite fijar el tamaño y la densidad de pantalla y pedir la imagen ya
- * medida. Node 22 trae WebSocket incorporado, de modo que no hace falta
- * ninguna dependencia nueva para hablar con él.
- *
- * La explotación es inventada (`capturas-datos.mjs`): una ficha pública no
- * puede enseñar los crotales ni las cuentas de una explotación real.
- *
- * Uso:  npm run build  &&  node scripts/capturas.mjs
- * Salida: capturas/<perfil>/<n>-<nombre>.png
- */
-
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
+import { abrirChrome, esperar } from './chrome.mjs';
 import { explotacionDemo, facturaDemoPdf, usuarioDemo } from './capturas-datos.mjs';
 
 const RAIZ = resolve(import.meta.dirname, '..');
@@ -28,12 +12,14 @@ const PUERTO = 5199;
 const PUERTO_CDP = 9333;
 
 /*
- * Tamaños exigidos por cada tienda. El ancho en CSS por la densidad da el
- * píxel final: 440x956 a 3 son los 1320x2868 del iPhone de 6,9 pulgadas, y
- * 960x540 a 2 son los 1920x1080 del apartado de tableta de Google Play.
+ * Tamaños de Google Play. El ancho en CSS por la densidad da el píxel final.
+ *
+ * Play no acepta cualquier proporción: el lado largo no puede pasar del doble
+ * del corto. Por eso el teléfono va a 9:16 (1080x1920) y no al formato
+ * alargado de los móviles de hoy, que se quedaría fuera de norma.
  */
 const PERFILES = [
-  { nombre: 'app-store-iphone', ancho: 440, alto: 956, densidad: 3, movil: true },
+  { nombre: 'google-play-telefono', ancho: 540, alto: 960, densidad: 2, movil: true },
   { nombre: 'google-play-tableta', ancho: 960, alto: 540, densidad: 2, movil: false }
 ];
 
@@ -105,138 +91,52 @@ function servir(raiz, pdf) {
   return new Promise(ok => servidor.listen(PUERTO, () => ok(servidor)));
 }
 
-function buscarChrome() {
-  const candidatos = [
-    process.env.CHROME,
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium'
-  ].filter(Boolean);
-  const encontrado = candidatos.find(c => existsSync(c));
-  if (!encontrado) throw new Error('No se ha encontrado Chrome ni Edge. Define CHROME=<ruta>.');
-  return encontrado;
-}
-
-/** Cliente mínimo del protocolo de DevTools: abrir, mandar, esperar respuesta. */
-async function conectar(url) {
-  const ws = new WebSocket(url);
-  const pendientes = new Map();
-  let siguienteId = 0;
-  await new Promise((ok, fallo) => {
-    ws.addEventListener('open', ok, { once: true });
-    ws.addEventListener('error', () => fallo(new Error('No se ha podido hablar con Chrome.')), {
-      once: true
-    });
-  });
-  ws.addEventListener('message', ev => {
-    const msg = JSON.parse(String(ev.data));
-    const espera = pendientes.get(msg.id);
-    if (!espera) return;
-    pendientes.delete(msg.id);
-    msg.error ? espera.fallo(new Error(msg.error.message)) : espera.ok(msg.result);
-  });
-  return {
-    enviar: (method, params = {}) =>
-      new Promise((ok, fallo) => {
-        const id = ++siguienteId;
-        pendientes.set(id, { ok, fallo });
-        ws.send(JSON.stringify({ id, method, params }));
-      }),
-    cerrar: () => ws.close()
-  };
-}
-
-const esperar = ms => new Promise(ok => setTimeout(ok, ms));
-
 async function main() {
   if (!existsSync(join(SITIO, 'index.html')))
     throw new Error('Falta dist/. Ejecuta `npm run build` antes que esto.');
 
   const pdf = pdfDeDemostracion(facturaDemoPdf);
   const servidor = await servir(SITIO, pdf);
-  const perfilChrome = join(RAIZ, 'node_modules', '.cache', 'chrome-capturas');
-  await mkdir(perfilChrome, { recursive: true });
+  const chrome = await abrirChrome(PUERTO_CDP);
+  const { evaluar } = chrome;
 
-  const chrome = spawn(
-    buscarChrome(),
-    [
-      '--headless=new',
-      '--disable-gpu',
-      '--hide-scrollbars',
-      '--force-color-profile=srgb',
-      `--remote-debugging-port=${PUERTO_CDP}`,
-      `--user-data-dir=${perfilChrome}`,
-      'about:blank'
-    ],
-    { stdio: 'ignore' }
-  );
+  const ir = async ruta => {
+    await chrome.enviar('Page.navigate', { url: `http://127.0.0.1:${PUERTO}${ruta}` });
+    await esperar(2200);
+  };
 
-  let cdp;
+  /*
+   * Una captura de tienda tiene que enseñar lo que hace la aplicación, no su
+   * cabecera. En las pantallas largas se baja hasta el primer gráfico antes
+   * de disparar; el encuadre de 16:9 apenas da para media pantalla.
+   */
+  const bajarHasta = texto =>
+    evaluar(`(async () => {
+      const titulos = [...document.querySelectorAll('h2, h3')];
+      const objetivo = titulos.find(h => h.textContent.includes(${JSON.stringify(texto)}));
+      if (objetivo) objetivo.scrollIntoView({ block: 'start' });
+      window.scrollBy(0, -16);
+      await new Promise(r => setTimeout(r, 700));
+      return objetivo ? 'ok' : 'no encontrado: ' + ${JSON.stringify(texto)};
+    })()`);
+
+  const capturar = async (perfil, n, nombre) => {
+    const { data } = await chrome.enviar('Page.captureScreenshot', {
+      format: 'png',
+      captureBeyondViewport: false
+    });
+    const destino = join(SALIDA, perfil.nombre, `${n}-${nombre}.png`);
+    await writeFile(destino, Buffer.from(data, 'base64'));
+    const px = `${perfil.ancho * perfil.densidad}x${perfil.alto * perfil.densidad}`;
+    console.log(`  ${n}. ${nombre} · ${px}`);
+  };
+
   try {
-    let objetivo;
-    for (let intento = 0; intento < 40 && !objetivo; intento++) {
-      await esperar(250);
-      try {
-        const lista = await fetch(`http://127.0.0.1:${PUERTO_CDP}/json/list`).then(r => r.json());
-        objetivo = lista.find(t => t.type === 'page');
-      } catch {
-        /* Chrome todavía está arrancando. */
-      }
-    }
-    if (!objetivo) throw new Error('Chrome no ha abierto el puerto de depuración.');
-    cdp = await conectar(objetivo.webSocketDebuggerUrl);
-    await cdp.enviar('Page.enable');
-    await cdp.enviar('Runtime.enable');
-
-    const evaluar = async expresion => {
-      const r = await cdp.enviar('Runtime.evaluate', {
-        expression: expresion,
-        awaitPromise: true,
-        returnByValue: true
-      });
-      if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'fallo');
-      return r.result.value;
-    };
-
-    const ir = async ruta => {
-      await cdp.enviar('Page.navigate', { url: `http://127.0.0.1:${PUERTO}${ruta}` });
-      await esperar(2200);
-    };
-
-    /*
-     * Una captura de tienda tiene que enseñar lo que hace la aplicación, no su
-     * cabecera. En las pantallas largas se baja hasta el primer gráfico antes
-     * de disparar; el encuadre de 16:9 apenas da para media pantalla.
-     */
-    const bajarHasta = texto =>
-      evaluar(`(async () => {
-        const titulos = [...document.querySelectorAll('h2, h3')];
-        const objetivo = titulos.find(h => h.textContent.includes(${JSON.stringify(texto)}));
-        if (objetivo) objetivo.scrollIntoView({ block: 'start' });
-        window.scrollBy(0, -16);
-        await new Promise(r => setTimeout(r, 700));
-        return objetivo ? 'ok' : 'no encontrado: ' + ${JSON.stringify(texto)};
-      })()`);
-
-    const capturar = async (perfil, n, nombre) => {
-      const { data } = await cdp.enviar('Page.captureScreenshot', {
-        format: 'png',
-        captureBeyondViewport: false
-      });
-      const destino = join(SALIDA, perfil.nombre, `${n}-${nombre}.png`);
-      await writeFile(destino, Buffer.from(data, 'base64'));
-      const px = `${perfil.ancho * perfil.densidad}x${perfil.alto * perfil.densidad}`;
-      console.log(`  ${n}. ${nombre} · ${px}`);
-    };
-
     for (const perfil of PERFILES) {
       console.log(`\n${perfil.nombre} (${perfil.ancho}x${perfil.alto} @${perfil.densidad})`);
       await rm(join(SALIDA, perfil.nombre), { recursive: true, force: true });
       await mkdir(join(SALIDA, perfil.nombre), { recursive: true });
-      await cdp.enviar('Emulation.setDeviceMetricsOverride', {
+      await chrome.enviar('Emulation.setDeviceMetricsOverride', {
         width: perfil.ancho,
         height: perfil.alto,
         deviceScaleFactor: perfil.densidad,
@@ -255,6 +155,17 @@ async function main() {
       })()`);
 
       await ir('/');
+      /* En el teléfono los filtros ocupan media pantalla y empujan la lista
+       * fuera del encuadre. Lo que tiene que verse son los animales. */
+      if (perfil.movil)
+        await evaluar(`(async () => {
+          const contador = [...document.querySelectorAll('p')]
+            .find(n => n.textContent.includes('animales encontrados'));
+          if (contador) contador.scrollIntoView({ block: 'start' });
+          window.scrollBy(0, -12);
+          await new Promise(r => setTimeout(r, 600));
+          return 'ok';
+        })()`);
       await capturar(perfil, 1, 'rebano');
 
       await evaluar(`(async () => {
@@ -307,8 +218,7 @@ async function main() {
     }
     console.log(`\nListo. Imágenes en ${SALIDA}`);
   } finally {
-    cdp?.cerrar();
-    chrome.kill();
+    chrome.cerrar();
     servidor.close();
   }
 }

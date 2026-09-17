@@ -114,54 +114,41 @@ Hacer seis capturas y mantener este orden en ambas tiendas:
 Si solo se suben cuatro a Google Play, usar 1, 2, 4 y 6. Aun así, cuatro en cada tipo de dispositivo
 son lo recomendable para optar a las superficies de promoción.
 
-## Tamaños de Google Play
+## Tamaños y cómo se generan
 
-### Teléfono
+Las imágenes **no se hacen a mano**: salen de un guion que conduce un Chrome sin interfaz, con la
+explotación inventada de `scripts/capturas-datos.mjs`.
 
-- Preparar **6 PNG de 24 bits, sin alfa, de 1080×1920 px**, orientación vertical 9:16.
-- En el navegador: viewport CSS de **360×640** con factor de dispositivo **3**.
-- Google acepta entre 2 y 8 por tipo de dispositivo; cada lado debe estar entre 320 y 3840 px y el
-  lado largo no puede superar dos veces el corto.
+```bash
+npm run capturas
+```
 
-### Tabletas, si el AAB las admite
+Deja en `capturas/` las seis capturas de teléfono, las seis de tableta y el gráfico destacado. Hay
+que volver a lanzarlo cada vez que cambie la interfaz.
 
-La TWA no debe anunciar compatibilidad con tabletas sin probar el diseño. Si se mantienen como
-dispositivos compatibles:
+### Capturas
 
-- preparar al menos **4 capturas de 1920×1080 px**, orientación horizontal 16:9, para el apartado
-  de 7 pulgadas;
-- repetir las 4 para el apartado de 10 pulgadas;
-- en el navegador: viewport CSS de **960×540** y factor **2**.
+| Apartado de Play | Píxeles | Proporción |
+| ---------------- | ------- | ---------- |
+| Teléfono         | 1080×1920 | 9:16 |
+| Tableta          | 1920×1080 | 16:9 |
 
-Google admite de 1080 a 7680 px para pantallas grandes. No reutilizar una captura de teléfono
-estirada: debe mostrar la navegación lateral real de Chaparra.
+> **Ojo con la proporción.** Play exige que el lado largo no pase del **doble** del corto. Un
+> encuadre de móvil moderno (1320×2868, 2,17×) queda fuera de norma y lo rechaza, aunque el tamaño
+> en píxeles sea correcto. Por eso el teléfono va a 9:16 y no al formato alargado de hoy.
 
-Además de las capturas, Play exige un gráfico destacado **1024×500 px**, JPEG o PNG de 24 bits sin
-alfa. No se ha creado porque el encargo prohíbe preparar imágenes.
+### Gráfico destacado
 
-## Tamaños de App Store
+**1024×500**, JPEG sin canal alfa, en `capturas/google-play/grafico-destacado.jpg`. Lo dibuja
+`scripts/grafico-destacado.mjs` con la tipografía y los colores de la aplicación. La mitad derecha
+se deja despejada a propósito: Play superpone ahí el icono y el título en algunas superficies.
 
-Para iPhone se puede entregar un único juego de 1 a 10 capturas del tamaño mayor y dejar que App
-Store Connect escale las demás:
+### Estado de sincronización en las capturas
 
-- **6 capturas verticales de 1320×2868 px** para pantalla de 6,9 pulgadas;
-- en el navegador: viewport CSS de **440×956** y factor **3**;
-- PNG o JPEG sin transparencia.
-
-Si el binario admite iPad, es obligatorio otro juego:
-
-- **6 capturas verticales de 2064×2752 px** para iPad de 13 pulgadas;
-- en el navegador: viewport CSS de **1032×1376** y factor **2**.
-
-La primera versión recomendada en el plan limita el destino a iPhone. Si se habilita iPad, hay que
-probarlo y entregar sus imágenes; no basta con ocultar el apartado.
-
-Importante: el navegador sirve para las pantallas compartidas del `WKWebView`, pero no puede generar
-honestamente el escáner VisionKit, la hoja de compartir ni los avisos nativos. Cuando esas funciones
-existan, sus capturas finales deben salir del simulador o del dispositivo con el binario enviado a
-Apple. Inventarlas en el navegador expondría la ficha a rechazo por no coincidir con la aplicación.
+La explotación de demostración vive solo en el navegador, así que la cabecera dice «En este
+navegador» en vez de «Al día». Para que salga «Al día», entra con la cuenta ficticia del revisor y
+vuelve a lanzar `npm run capturas`.
 
 ## Fuentes oficiales
 
 - [Recursos de vista previa de Google Play](https://support.google.com/googleplay/android-developer/answer/9866151?hl=es)
-- [Capturas de App Store](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications)

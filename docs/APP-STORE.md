@@ -1,5 +1,11 @@
 # App Store: plan nativo y ficha de privacidad
 
+> **Aparcado por decisión del dueño (17 de septiembre de 2026).** La App Store cuesta 99 $ al año
+> y exige, por la directriz 4.2, construir funcionalidad nativa que hoy no existe. Se publica solo
+> en Google Play. Este documento se conserva porque el plan sigue siendo válido el día que se
+> retome; nada de lo que hay aquí bloquea Android.
+
+
 Documento preparado el 17 de septiembre de 2026. Chaparra todavía no tiene proyecto iOS; una PWA
 embebida sin más cambios tiene un riesgo alto de rechazo por la directriz 4.2.
 

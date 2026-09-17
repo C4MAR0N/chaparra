@@ -102,15 +102,13 @@ un trámite.
   toda app que permita crear cuenta, además del borrado dentro de la aplicación. En aplicación
   plena desde el 15 de abril de 2024.
 
-Ambas declaran el contacto `agro@agrovanza.es` y describen con precisión las dos únicas
-conexiones a terceros que existen: **Google Fonts** (la tipografía se descarga de Google, que ve
-la IP) y **GitHub Pages** (el alojamiento registra la IP, como cualquier servidor web). Ninguna
-recibe datos de la explotación.
+Ambas declaran el contacto `agro@agrovanza.es`. Desde que la tipografía se aloja en el propio
+dominio, **la aplicación no carga ningún recurso de terceros**: la única conexión que queda es
+la del propio alojamiento (GitHub Pages registra la IP, como cualquier servidor web), y una vez
+instalada en el móvil funciona sin conexión.
 
-> **Mejora pendiente que merece la pena:** alojar la tipografía en el propio dominio elimina la
-> única conexión a Google y permite afirmar sin matices que no sale nada del dispositivo. Además
-> la app cargaría antes y sin conexión se vería con su tipografía real. Es trabajo de poco más de
-> un rato y refuerza justo el argumento de venta de Chaparra.
+Esto permite responder «no se recopilan datos» en el formulario de seguridad de datos de Play y
+en las etiquetas de privacidad de Apple sin ninguna salvedad incómoda.
 
 ### 2.5 Cuentas, costes y plazos
 

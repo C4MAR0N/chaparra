@@ -7,21 +7,18 @@
  * disponible sin conexión.
  *
  * Estrategias:
- *   - Navegación  -> red primero, y si falla, el index.html cacheado.
- *   - Estáticos   -> caché primero, revalidando en segundo plano.
- *   - Tipografías -> caché primero (Google Fonts).
- *   - Resto       -> se deja pasar sin tocar.
+ *   - Navegación -> red primero, y si falla, el index.html cacheado.
+ *   - Estáticos  -> caché primero, revalidando en segundo plano. Incluye la
+ *                   tipografía, que se sirve desde este mismo dominio.
+ *   - Resto      -> se deja pasar sin tocar.
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = `chaparra-shell-${VERSION}`;
 const ASSETS = `chaparra-assets-${VERSION}`;
-const FONTS = `chaparra-fonts-${VERSION}`;
-const ACTUALES = [SHELL, ASSETS, FONTS];
+const ACTUALES = [SHELL, ASSETS];
 
 const INDEX = new URL('./', self.location).href;
-
-const ORIGENES_FUENTES = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
 
 /*
  * En la primera visita el service worker se activa cuando el navegador ya ha
@@ -115,11 +112,6 @@ self.addEventListener('fetch', event => {
 
   if (request.mode === 'navigate') {
     event.respondWith(redPrimero(request));
-    return;
-  }
-
-  if (ORIGENES_FUENTES.includes(url.origin)) {
-    event.respondWith(cachePrimero(request, FONTS));
     return;
   }
 

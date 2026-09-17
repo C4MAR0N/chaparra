@@ -10,8 +10,8 @@ export function PrivacyContent() {
         <p>
           La cuenta, los animales, los registros y las fotos se guardan únicamente en este navegador
           y dispositivo. Chaparra no los envía a ningún servidor ni los comparte con otros usuarios
-          de la aplicación. La fuente tipográfica se solicita a Google Fonts; si no hay conexión se
-          utiliza la fuente del dispositivo.
+          de la aplicación. Tampoco carga nada de terceros: la tipografía se sirve desde el propio
+          dominio, así que usarla no revela tu dirección IP a nadie más.
         </p>
       </section>
       <section>

@@ -113,7 +113,18 @@ export async function register(nombre: string, email: string, password: string, 
   return user;
 }
 export async function login(email: string, password: string, remember: boolean) {
-  const user = getUsers().find(u => u.email === normalizeEmail(email));
+  const users = getUsers();
+  /*
+   * Sin servidor, las cuentas viven en el navegador donde se crearon. Si aquí no
+   * hay ninguna, decirlo en lugar de "contraseña incorrecta": el usuario estaría
+   * probando una contraseña correcta de otro dispositivo una y otra vez. No
+   * revela nada, porque no hay ninguna cuenta que proteger en este navegador.
+   */
+  if (!users.length)
+    throw new Error(
+      'En este navegador todavía no hay ninguna cuenta. Las cuentas de Chaparra no se comparten entre dispositivos: crea una aquí y luego restaura tu copia de seguridad desde Ajustes.'
+    );
+  const user = users.find(u => u.email === normalizeEmail(email));
   if (!user || !(await verifyPassword(user, password)))
     throw new Error('Correo o contraseña incorrectos');
   startSession(user.id, remember);

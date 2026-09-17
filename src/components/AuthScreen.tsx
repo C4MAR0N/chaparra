@@ -130,7 +130,7 @@ export function AuthScreen({ onAccess }: { onAccess: (user: UserRecord) => void 
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-stone-600">
               {mode === 'login'
-                ? 'Accede a la explotación guardada en este navegador.'
+                ? 'Accede a la explotación guardada en este navegador. Si creaste la cuenta en otro dispositivo, aquí no aparecerá: crea una y restaura tu copia de seguridad.'
                 : mode === 'register'
                   ? 'Después configuraremos tu explotación en cuatro pasos.'
                   : 'No hay recuperación por correo: la cuenta vive únicamente en este navegador.'}

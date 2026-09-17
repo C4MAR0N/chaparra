@@ -181,6 +181,28 @@ export function updateUser(
   );
   return updated;
 }
+/**
+ * Marca la encuesta como completada sin pasar por la validación de correo único.
+ *
+ * Durante la migración conviven dos cuentas con el mismo correo —la local de
+ * siempre y la del servidor— y esa duplicidad es legítima y temporal. Validar
+ * aquí dejaría al ganadero atrapado en la encuesta después de traer sus datos.
+ */
+export function marcarEncuestaCompletada(userId: string): UserRecord {
+  const users = getUsers();
+  const user = users.find(u => u.id === userId);
+  if (!user) throw new Error('La cuenta ya no existe.');
+  const actualizado: UserRecord = {
+    ...user,
+    onboardingCompletedAt: user.onboardingCompletedAt ?? new Date().toISOString()
+  };
+  writeJson(
+    USERS_KEY,
+    users.map(u => (u.id === userId ? actualizado : u))
+  );
+  return actualizado;
+}
+
 export async function changePassword(userId: string, current: string, next: string) {
   const user = getUsers().find(u => u.id === userId);
   if (!user || !(await verifyPassword(user, current)))

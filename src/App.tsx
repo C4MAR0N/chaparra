@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { FarmProfile, UserRecord } from './types';
-import { updateUser } from './services/auth';
+import { marcarEncuestaCompletada, updateUser } from './services/auth';
 import { salir, usuarioActual } from './services/acceso';
 import { emptySaleTemplate, loadData, replaceData } from './services/db';
 import { getStorageWarning, subscribeStorageWarning } from './services/storage';
@@ -8,10 +8,12 @@ import { FarmProvider } from './context/FarmContext';
 import { AuthScreen } from './components/AuthScreen';
 import { Onboarding } from './components/Onboarding';
 import { AppShell } from './components/AppShell';
+import { MigrarExplotacion, explotacionesLocales } from './components/MigrarExplotacion';
 import { Banner } from './components/ui';
 export default function App() {
   const [user, setUser] = useState<UserRecord | null>(null),
     [cargando, setCargando] = useState(true),
+    [omitirMigracion, setOmitirMigracion] = useState(false),
     [survey, setSurvey] = useState(false);
   const warning = useSyncExternalStore(subscribeStorageWarning, getStorageWarning);
   useEffect(() => {
@@ -61,6 +63,17 @@ export default function App() {
     setSurvey(false);
   }
   const farm = user ? loadData(user.id).farm : null;
+  /*
+   * Al entrar por primera vez con la cuenta del servidor, la explotación está
+   * vacía pero los datos de antes siguen en el dispositivo. Se ofrece traerlos
+   * antes de mandar al ganadero a rellenar la encuesta de cero.
+   */
+  const puedeMigrar =
+    !!user &&
+    user.origen === 'nube' &&
+    !farm &&
+    !omitirMigracion &&
+    !!explotacionesLocales(user.id).length;
   return (
     <>
       {warning && (
@@ -76,6 +89,15 @@ export default function App() {
         </div>
       ) : !user ? (
         <AuthScreen onAccess={setUser} />
+      ) : puedeMigrar ? (
+        <MigrarExplotacion
+          user={user}
+          onHecho={() => {
+            setOmitirMigracion(true);
+            setUser(marcarEncuestaCompletada(user.id));
+          }}
+          onOmitir={() => setOmitirMigracion(true)}
+        />
       ) : !user.onboardingCompletedAt || !farm || survey ? (
         <Onboarding
           key={user.id + (survey ? '-edit' : '-new')}

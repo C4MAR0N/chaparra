@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { FarmProfile, UserRecord } from './types';
-import { currentUser, logout, updateUser } from './services/auth';
+import { updateUser } from './services/auth';
+import { salir, usuarioActual } from './services/acceso';
 import { emptySaleTemplate, loadData, replaceData } from './services/db';
 import { getStorageWarning, subscribeStorageWarning } from './services/storage';
 import { FarmProvider } from './context/FarmContext';
@@ -9,30 +10,39 @@ import { Onboarding } from './components/Onboarding';
 import { AppShell } from './components/AppShell';
 import { Banner } from './components/ui';
 export default function App() {
-  const [user, setUser] = useState<UserRecord | null>(() => currentUser()),
+  const [user, setUser] = useState<UserRecord | null>(null),
+    [cargando, setCargando] = useState(true),
     [survey, setSurvey] = useState(false);
   const warning = useSyncExternalStore(subscribeStorageWarning, getStorageWarning);
   useEffect(() => {
+    let vivo = true;
+    /*
+     * La sesión puede venir del servidor o del propio dispositivo. Se lee sin
+     * bloquear: si no hay cobertura, `usuarioActual` cae a la sesión guardada y
+     * el ganadero entra igual.
+     */
     const refresh = () =>
-      setUser(previous => {
-        const next = currentUser();
-        return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+      void usuarioActual().then(next => {
+        if (!vivo) return;
+        setUser(previous => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
+        setCargando(false);
       });
+    refresh();
     const storage = (event: StorageEvent) => {
-      if (!event.key || event.key === 'chaparra:v2:session' || event.key === 'chaparra:v2:users')
-        refresh();
+      if (!event.key || event.key.startsWith('chaparra:v2:')) refresh();
     };
     const timer = setInterval(refresh, 30000);
     window.addEventListener('storage', storage);
     window.addEventListener('focus', refresh);
     return () => {
+      vivo = false;
       clearInterval(timer);
       window.removeEventListener('storage', storage);
       window.removeEventListener('focus', refresh);
     };
   }, []);
   function signOut() {
-    logout();
+    void salir();
     setUser(null);
     setSurvey(false);
   }
@@ -58,7 +68,13 @@ export default function App() {
           <Banner tone="error">{warning}</Banner>
         </div>
       )}
-      {!user ? (
+      {cargando ? (
+        <div className="flex min-h-screen items-center justify-center p-6">
+          <p className="text-stone-600" role="status">
+            Abriendo tu explotación…
+          </p>
+        </div>
+      ) : !user ? (
         <AuthScreen onAccess={setUser} />
       ) : !user.onboardingCompletedAt || !farm || survey ? (
         <Onboarding

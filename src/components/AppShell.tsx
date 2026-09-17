@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import {
+  AlertTriangle,
   BarChart3,
+  CheckCircle2,
   ClipboardList,
+  CloudOff,
+  RefreshCw,
   HardDrive,
   Leaf,
   LogOut,
@@ -34,7 +38,31 @@ export function AppShell({
   onSurvey: () => void;
   onUserChange: (user: UserRecord) => void;
 }) {
-  const { user, farm, notice } = useFarm();
+  const { user, farm, notice, estadoNube, sincronizarAhora } = useFarm();
+  /* Qué se le dice al ganadero según el estado de la sincronización. */
+  const estado = {
+    inactiva: {
+      Icono: HardDrive,
+      texto: 'En este navegador',
+      ayuda: 'Los datos solo están en este dispositivo.'
+    },
+    sincronizando: {
+      Icono: RefreshCw,
+      texto: 'Sincronizando…',
+      ayuda: 'Enviando y recibiendo cambios.'
+    },
+    'al-dia': {
+      Icono: CheckCircle2,
+      texto: 'Al día',
+      ayuda: 'Todo guardado en tu cuenta. Toca para sincronizar ahora.'
+    },
+    'sin-conexion': {
+      Icono: CloudOff,
+      texto: 'Sin conexión',
+      ayuda: 'Se guarda aquí y se enviará cuando haya cobertura.'
+    },
+    error: { Icono: AlertTriangle, texto: 'Error al sincronizar', ayuda: 'Toca para reintentar.' }
+  }[estadoNube];
   const [tab, setTab] = useState<Tab>('herd'),
     [settings, setSettings] = useState(false);
   const nav = (mobile: boolean) =>
@@ -102,10 +130,20 @@ export function AppShell({
             <p className="mt-1 truncate font-semibold">{farm.nombreExplotacion}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <span className="hidden items-center gap-2 rounded-lg bg-stone-100 px-3 py-2 text-xs text-stone-600 sm:flex">
-              <HardDrive size={16} />
-              En este navegador
-            </span>
+            <button
+              type="button"
+              onClick={sincronizarAhora}
+              disabled={estadoNube === 'inactiva'}
+              title={estado.ayuda}
+              className="flex min-h-12 items-center gap-2 rounded-lg bg-stone-100 px-3 py-2 text-xs text-stone-600 disabled:cursor-default"
+            >
+              <estado.Icono
+                size={16}
+                className={estadoNube === 'sincronizando' ? 'animate-spin' : undefined}
+                aria-hidden="true"
+              />
+              <span className="hidden sm:inline">{estado.texto}</span>
+            </button>
             <Button
               variant="ghost"
               className="md:hidden"

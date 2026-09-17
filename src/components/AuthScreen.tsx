@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { ClipboardList, Eye, EyeOff, HardDrive, Leaf, TrendingUp } from 'lucide-react';
 import { Banner, Button, Field, Input } from './ui';
-import { login, normalizeEmail, register, validEmail } from '../services/auth';
+import { normalizeEmail, validEmail } from '../services/auth';
+import { entrar, registrar, reenviarConfirmacion } from '../services/acceso';
+import { hayNube } from '../services/nube';
 import type { UserRecord } from '../types';
 import { SecurityPrivacyModal } from './SecurityPrivacyModal';
 import { DeleteAccountModal } from './DeleteAccountModal';
@@ -16,6 +18,7 @@ export function AuthScreen({ onAccess }: { onAccess: (user: UserRecord) => void 
     [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
+    [aviso, setAviso] = useState(''),
     [privacy, setPrivacy] = useState(false),
     [deleting, setDeleting] = useState(false);
   const emailError =
@@ -45,11 +48,24 @@ export function AuthScreen({ onAccess }: { onAccess: (user: UserRecord) => void 
     event.preventDefault();
     setBusy(true);
     setError('');
+    setAviso('');
     try {
-      const user =
-        mode === 'register'
-          ? await register(nombre, email, password, remember)
-          : await login(email, password, remember);
+      if (mode === 'register') {
+        const { usuario, confirmarCorreo } = await registrar(nombre, email, password, remember);
+        setPassword('');
+        setConfirmation('');
+        if (confirmarCorreo) {
+          // Con la confirmación activada no hay sesión todavía: hay que ir al correo.
+          setAviso(
+            `Te hemos enviado un correo a ${normalizeEmail(email)}. Abre el enlace para activar la cuenta y vuelve aquí a iniciar sesión.`
+          );
+          setMode('login');
+          return;
+        }
+        if (usuario) onAccess(usuario);
+        return;
+      }
+      const user = await entrar(email, password, remember);
       setPassword('');
       setConfirmation('');
       onAccess(user);
@@ -90,8 +106,10 @@ export function AuthScreen({ onAccess }: { onAccess: (user: UserRecord) => void 
               ],
               [
                 HardDrive,
-                'Tus datos, en tu dispositivo',
-                'Cuentas locales y copias de seguridad que controlas tú.'
+                hayNube ? 'En el móvil y en el ordenador' : 'Tus datos, en tu dispositivo',
+                hayNube
+                  ? 'La misma explotación en todos tus dispositivos, y sin cobertura sigue funcionando.'
+                  : 'Cuentas locales y copias de seguridad que controlas tú.'
               ]
             ].map(([Icon, title, description]) => {
               const I = Icon as typeof Leaf;
@@ -109,7 +127,9 @@ export function AuthScreen({ onAccess }: { onAccess: (user: UserRecord) => void 
             })}
           </ul>
         </div>
-        <p className="hidden text-xs text-brand-200 md:block">Gestión ganadera · Sin servidor</p>
+        <p className="hidden text-xs text-brand-200 md:block">
+          Gestión ganadera · {hayNube ? 'Funciona sin cobertura' : 'Sin servidor'}
+        </p>
       </aside>
       <main className="flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-md space-y-6">
@@ -130,10 +150,16 @@ export function AuthScreen({ onAccess }: { onAccess: (user: UserRecord) => void 
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-stone-600">
               {mode === 'login'
-                ? 'Accede a la explotación guardada en este navegador. Si creaste la cuenta en otro dispositivo, aquí no aparecerá: crea una y restaura tu copia de seguridad.'
+                ? hayNube
+                  ? 'Entra con tu cuenta. Es la misma en el móvil y en el ordenador.'
+                  : 'Accede a la explotación guardada en este navegador. Si creaste la cuenta en otro dispositivo, aquí no aparecerá: crea una y restaura tu copia de seguridad.'
                 : mode === 'register'
-                  ? 'Después configuraremos tu explotación en cuatro pasos.'
-                  : 'No hay recuperación por correo: la cuenta vive únicamente en este navegador.'}
+                  ? hayNube
+                    ? 'Te enviaremos un correo para activar la cuenta. Después configuraremos tu explotación en cuatro pasos.'
+                    : 'Después configuraremos tu explotación en cuatro pasos.'
+                  : hayNube
+                    ? 'Escribe tu correo y te enviaremos un enlace para cambiar la contraseña.'
+                    : 'No hay recuperación por correo: la cuenta vive únicamente en este navegador.'}
             </p>
           </div>
           {mode === 'recovery' ? (
@@ -242,6 +268,27 @@ export function AuthScreen({ onAccess }: { onAccess: (user: UserRecord) => void 
                 Mantener la sesión iniciada
               </label>
               {error && <Banner tone="error">{error}</Banner>}
+              {aviso && (
+                <Banner tone="success">
+                  <span className="block">{aviso}</span>
+                  <Button
+                    variant="ghost"
+                    className="mt-2"
+                    disabled={busy}
+                    onClick={() => {
+                      setBusy(true);
+                      reenviarConfirmacion(email)
+                        .then(() => setAviso('Te hemos vuelto a enviar el correo de activación.'))
+                        .catch(e =>
+                          setError(e instanceof Error ? e.message : 'No se ha podido reenviar.')
+                        )
+                        .finally(() => setBusy(false));
+                    }}
+                  >
+                    No me ha llegado, reenviar
+                  </Button>
+                </Banner>
+              )}
               <Button
                 type="submit"
                 loading={busy}
@@ -265,7 +312,11 @@ export function AuthScreen({ onAccess }: { onAccess: (user: UserRecord) => void 
                   variant="ghost"
                   onClick={() => changeMode(mode === 'login' ? 'register' : 'login')}
                 >
-                  {mode === 'login' ? 'Crear una cuenta local' : 'Iniciar sesión'}
+                  {mode === 'login'
+                    ? hayNube
+                      ? 'Crear una cuenta'
+                      : 'Crear una cuenta local'
+                    : 'Iniciar sesión'}
                 </Button>
               </div>
             </form>

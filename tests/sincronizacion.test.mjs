@@ -151,3 +151,41 @@ test('la marca de la próxima sincronización es la más reciente recibida', () 
   assert.equal(siguiente, t(40));
   assert.equal(ultimoCambio([], previo), previo, 'sin cambios, la marca no retrocede');
 });
+
+test('marca como cambiado solo lo que de verdad ha cambiado', async () => {
+  const { marcarCambios } = await import('../src/services/sincronizacion.ts');
+  const antes = {
+    ...VACIA,
+    farm: { nombreExplotacion: 'La Cerquilla' },
+    animals: [
+      { id: 'a1', crotal: 'ES1' },
+      { id: 'a2', crotal: 'ES2' }
+    ]
+  };
+  const despues = {
+    ...antes,
+    animals: [
+      { id: 'a1', crotal: 'ES1', peso: 500 },
+      { id: 'a2', crotal: 'ES2' }
+    ]
+  };
+  const metas = marcarCambios(antes, despues, {});
+  assert.ok(metas[clave('animal', 'a1')], 'el animal modificado debe marcarse');
+  assert.ok(!metas[clave('animal', 'a2')], 'el que no cambia no debe marcarse');
+});
+
+test('un animal eliminado deja lápida en vez de olvidarse', async () => {
+  const { marcarCambios } = await import('../src/services/sincronizacion.ts');
+  const antes = { ...VACIA, animals: [{ id: 'a1', crotal: 'ES1' }] };
+  const despues = { ...VACIA, animals: [] };
+  const metas = marcarCambios(antes, despues, {});
+  assert.equal(metas[clave('animal', 'a1')].borrado, true);
+});
+
+test('un registro que vuelve tras un borrado se marca como cambio', async () => {
+  const { marcarCambios } = await import('../src/services/sincronizacion.ts');
+  const previas = { [clave('animal', 'a1')]: { actualizado: t(1), borrado: true } };
+  const despues = { ...VACIA, animals: [{ id: 'a1', crotal: 'ES1' }] };
+  const metas = marcarCambios(VACIA, despues, previas);
+  assert.ok(!metas[clave('animal', 'a1')].borrado, 'debe dejar de estar borrado');
+});

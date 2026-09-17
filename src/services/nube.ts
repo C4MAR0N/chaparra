@@ -29,7 +29,8 @@ export const nube: SupabaseClient | null = hayNube
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: false,
+        // El enlace de confirmación del correo trae la sesión en la URL: hay que leerla.
+        detectSessionInUrl: true,
         storageKey: 'chaparra:v2:sesion-nube'
       }
     })

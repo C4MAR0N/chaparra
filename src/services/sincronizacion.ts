@@ -170,3 +170,30 @@ export function ultimoCambio(registros: Registro[], previo: string): string {
     previo
   );
 }
+
+/**
+ * Compara la explotación antes y después de un cambio y marca lo que ha
+ * cambiado, para que la próxima sincronización suba solo eso. Los registros que
+ * desaparecen se marcan como borrados, no se olvidan: sin lápida reaparecerían
+ * al sincronizar con otro dispositivo.
+ *
+ * Función pura para poder probarla: es la que decide qué viaja por la red.
+ */
+export function marcarCambios(anterior: FarmData, siguiente: FarmData, metas: Metas): Metas {
+  const ahora = new Date().toISOString();
+  const resultado: Metas = { ...metas };
+
+  const antes = new Map(aplanar(anterior, {}).map(r => [clave(r.tipo, r.id), r]));
+  const despues = new Map(aplanar(siguiente, {}).map(r => [clave(r.tipo, r.id), r]));
+
+  for (const [k, r] of despues) {
+    const previo = antes.get(k);
+    const igual = previo && JSON.stringify(previo.datos) === JSON.stringify(r.datos);
+    // Un registro nuevo, o modificado, o que resucita tras un borrado.
+    if (!igual || resultado[k]?.borrado) resultado[k] = { actualizado: ahora };
+  }
+  for (const k of antes.keys()) {
+    if (!despues.has(k)) resultado[k] = { actualizado: ahora, borrado: true };
+  }
+  return resultado;
+}

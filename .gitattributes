@@ -1,0 +1,5 @@
+# El motor y el diccionario del lector de facturas son binarios disfrazados de
+# texto: llevan el wasm incrustado en base64. Git no debe tocarles los finales
+# de línea al sacarlos en otro sistema.
+public/ocr/** -text
+*.traineddata.gz binary

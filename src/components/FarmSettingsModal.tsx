@@ -8,6 +8,7 @@ import { changePassword, updateUser } from '../services/auth';
 import { downloadBackup, readBackup } from '../services/backup';
 import { descargarExcel } from '../services/excel';
 import { buscarMunicipios } from '../services/tiempo';
+import { explotacionesLocales, traerExplotacion } from './MigrarExplotacion';
 import { Banner, Button, Card, ConfirmModal, Field, Input, Modal, Select } from './ui';
 import { DeleteAccountModal } from './DeleteAccountModal';
 import { SecurityPrivacyModal } from './SecurityPrivacyModal';
@@ -35,6 +36,8 @@ export function FarmSettingsModal({
   const [backup, setBackup] = useState<Backup | null>(null),
     [deleting, setDeleting] = useState(false),
     [privacy, setPrivacy] = useState(false);
+  const [locales] = useState(() => explotacionesLocales(user.id));
+  const [aTraer, setATraer] = useState<(typeof locales)[number] | null>(null);
   const [buscaMunicipio, setBuscaMunicipio] = useState(''),
     [municipios, setMunicipios] = useState<Municipio[]>([]),
     [buscandoMunicipio, setBuscandoMunicipio] = useState(false);
@@ -364,6 +367,32 @@ export function FarmSettingsModal({
           </Button>
         </form>
       </section>
+      {locales.length > 0 && (
+        <section className="space-y-4 border-t border-stone-200 pt-5">
+          <h3 className="section-heading">Traer una explotación de este dispositivo</h3>
+          <p className="text-sm leading-relaxed text-stone-600">
+            En este navegador hay datos guardados de antes, de cuando las cuentas no se compartían
+            entre dispositivos. Puedes traerlos a tu cuenta y quedarán en el móvil y en el
+            ordenador.
+          </p>
+          {locales.map(c => (
+            <div
+              key={c.usuario.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 p-4"
+            >
+              <div className="min-w-0">
+                <p className="font-semibold">{c.explotacion}</p>
+                <p className="mt-1 text-sm text-stone-600">
+                  {c.animales} animales · {c.facturas} facturas · {c.registros} registros
+                </p>
+              </div>
+              <Button variant="secondary" onClick={() => setATraer(c)}>
+                Traer
+              </Button>
+            </div>
+          ))}
+        </section>
+      )}
       <details className="border-t border-stone-200 pt-5">
         <summary className="inline-flex min-h-12 cursor-pointer items-center gap-2 text-sm font-semibold text-stone-600">
           <HardDrive size={18} />
@@ -415,6 +444,28 @@ export function FarmSettingsModal({
           Eliminar mi cuenta
         </Button>
       </div>
+      {aTraer && (
+        <ConfirmModal
+          title="Traer esta explotación"
+          onClose={() => setATraer(null)}
+          confirmLabel="Traer y sustituir"
+          onConfirm={() => {
+            const datos = traerExplotacion(aTraer.usuario.id, user);
+            update(() => datos);
+            setProfile(datos.farm!);
+            setATraer(null);
+            notify('Explotación traída. Se enviará al servidor en cuanto haya conexión.');
+          }}
+        >
+          <p className="mb-3 font-semibold">{aTraer.explotacion}</p>
+          <p className="text-sm leading-relaxed text-stone-600">
+            {aTraer.animales} animales, {aTraer.facturas} facturas y {aTraer.registros} registros de
+            producción pasarán a tu cuenta. <strong>Sustituirá lo que haya ahora en ella</strong>,
+            así que si ya has registrado algo aquí, se perderá. La explotación de origen queda
+            intacta en este dispositivo.
+          </p>
+        </ConfirmModal>
+      )}
       {backup && (
         <ConfirmModal
           title="Sustituir los datos de esta cuenta"

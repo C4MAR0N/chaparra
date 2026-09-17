@@ -45,6 +45,23 @@ export function explotacionesLocales(destino: string): Candidata[] {
     .filter(c => c.animales || c.facturas || c.registros);
 }
 
+/**
+ * Copia una explotación local a la cuenta indicada y la deja lista para subir.
+ * Se usa tanto en la pantalla de bienvenida como desde Ajustes, para que traer
+ * los datos no sea una oportunidad de un solo intento.
+ */
+export function traerExplotacion(origenId: string, destinoUser: UserRecord) {
+  const origen = loadData(origenId);
+  const destino = loadData(destinoUser.id);
+  // La explotación viaja entera, pero el correo de la plantilla pasa a ser el
+  // de la cuenta nueva: es el que aparecerá en las facturas.
+  const datos = { ...origen, saleTemplate: { ...origen.saleTemplate, email: destinoUser.email } };
+  replaceData(destinoUser.id, datos);
+  // Marcar todo como cambiado es lo que hace que suba al servidor.
+  guardarMetas(destinoUser.id, marcarCambios(destino, datos, leerMetas(destinoUser.id)));
+  return datos;
+}
+
 export function MigrarExplotacion({
   user,
   onHecho,
@@ -59,17 +76,7 @@ export function MigrarExplotacion({
 
   function traer(c: Candidata) {
     setTrabajando(c.usuario.id);
-    const origen = loadData(c.usuario.id);
-    const destino = loadData(user.id);
-    // La explotación viaja entera, pero el correo de la plantilla pasa a ser el
-    // de la cuenta nueva: es el que aparecerá en las facturas.
-    const datos = {
-      ...origen,
-      saleTemplate: { ...origen.saleTemplate, email: user.email }
-    };
-    replaceData(user.id, datos);
-    // Marcar todo como cambiado es lo que hace que suba al servidor.
-    guardarMetas(user.id, marcarCambios(destino, datos, leerMetas(user.id)));
+    traerExplotacion(c.usuario.id, user);
     onHecho();
   }
 

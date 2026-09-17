@@ -1,0 +1,38 @@
+{
+  "packageId": "es.agrovanza.chaparra",
+  "host": "c4mar0n.github.io",
+  "name": "Chaparra · Gestión ganadera",
+  "launcherName": "Chaparra",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#1F4A33",
+  "themeColorDark": "#1F4A33",
+  "navigationColor": "#1F4A33",
+  "navigationColorDark": "#1F4A33",
+  "navigationDividerColor": "#E7E5E4",
+  "navigationDividerColorDark": "#E7E5E4",
+  "backgroundColor": "#FAFAF9",
+  "enableNotifications": false,
+  "startUrl": "/chaparra/",
+  "iconUrl": "https://c4mar0n.github.io/chaparra/icon-512.png",
+  "maskableIconUrl": "https://c4mar0n.github.io/chaparra/icon-maskable-512.png",
+  "appVersion": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://c4mar0n.github.io/chaparra/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://c4mar0n.github.io/chaparra/",
+  "minSdkVersion": 23,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "chaparra"
+  }
+}

@@ -5,3 +5,18 @@ dist/
 *.log
 .npm-cache/
 artifacts/
+
+# Empaquetado Android (TWA)
+# El keystore firma la app: si se pierde, no se puede volver a actualizar en
+# Play nunca mas. No debe entrar en el repositorio bajo ningun concepto.
+android/*.keystore
+android/*.jks
+android/keystore-password.txt
+android/build/
+android/.gradle/
+android/app/
+android/gradle*
+android/*.apk
+android/*.aab
+android/store_icon.png
+android/app-release-*

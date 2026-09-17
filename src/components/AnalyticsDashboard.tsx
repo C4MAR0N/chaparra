@@ -1,172 +1,163 @@
-import React from 'react';
-import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
-import { PieChart as PieIcon, BarChart3, TrendingUp, ShieldCheck, HeartPulse } from 'lucide-react';
-import { Animal, InvoiceDoc, FarmConfig } from '../types';
-
-interface AnalyticsDashboardProps {
-  animals: Animal[];
-  invoices: InvoiceDoc[];
-  farmConfig: FarmConfig;
+import { useState } from 'react';
+import { useFarm } from '../context/FarmContext';
+import {
+  animalMeat,
+  euro,
+  hasMeat,
+  hasMilk,
+  milkSeries,
+  number,
+  today,
+  weightStats
+} from '../lib/domain';
+import { especieLabel } from '../lib/constants';
+import { Card, EmptyState, Field, Input, StatTile } from './ui';
+import { DataChart } from './Charts';
+function distribution(values: string[]) {
+  const counts: Record<string, number> = {};
+  values.forEach(value => {
+    counts[value] = (counts[value] ?? 0) + 1;
+  });
+  return Object.entries(counts).map(([label, value]) => ({ label, value }));
 }
-
-export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
-  animals,
-  invoices,
-  farmConfig
-}) => {
-  // 1. Health Status Distribution
-  const healthCounts: Record<string, number> = {};
-  animals.forEach(a => {
-    healthCounts[a.estadoSanitario] = (healthCounts[a.estadoSanitario] || 0) + 1;
-  });
-
-  const healthData = Object.keys(healthCounts).map(key => ({
-    name: key,
-    value: healthCounts[key]
-  }));
-
-  const HEALTH_COLORS: Record<string, string> = {
-    'Sano': '#10B981',
-    'En tratamiento': '#F59E0B',
-    'En cuarentena': '#EF4444',
-    'Vacunado': '#3B82F6',
-    'Observación': '#8B5CF6'
-  };
-
-  // 2. Milk Production per Cow (Top Milk Producers)
-  const milkCowsData = animals
-    .filter(a => (a.proposito === 'Ordeño' || a.proposito === 'Mixto') && (a.produccionDiariaLitros || 0) > 0)
-    .map(a => ({
-      crotal: a.crotal.substring(a.crotal.length - 6), // last 6 digits for chart label readability
-      litros: a.produccionDiariaLitros || 0
-    }));
-
-  // 3. Financial Comparison: Estimated Meat Value vs Accumulated Expenses
-  const totalMeatValue = animals.reduce((acc, a) => acc + (a.precioEstimadoVentaEuro || 1600), 0);
-  const totalExpenses = invoices.reduce((acc, i) => acc + i.importeTotalEuro, 0);
-
-  const financialData = [
-    { concepto: 'Valor Cabaña (€)', valor: totalMeatValue, fill: '#059669' },
-    { concepto: 'Gastos Facturados (€)', valor: totalExpenses, fill: '#DC2626' }
-  ];
-
-  // 4. Herd Breed Breakdown
-  const breedCounts: Record<string, number> = {};
-  animals.forEach(a => {
-    breedCounts[a.raza] = (breedCounts[a.raza] || 0) + 1;
-  });
-
-  const breedData = Object.keys(breedCounts).map(key => ({
-    raza: key,
-    cantidad: breedCounts[key]
-  }));
-
+export function AnalyticsDashboard() {
+  const { data, farm } = useFarm();
+  const [month, setMonth] = useState(today().slice(0, 7));
+  const period = month || today().slice(0, 7);
+  const active = data.animals.filter(a => a.activo),
+    invoices = data.invoices.filter(i => i.fecha.startsWith(period));
+  const expenses = invoices
+      .filter(i => i.tipo === 'Compra / Gasto')
+      .reduce((sum, i) => sum + i.importeTotalEuro, 0),
+    income = invoices
+      .filter(i => i.tipo === 'Venta')
+      .reduce((sum, i) => sum + i.importeTotalEuro, 0);
+  const liters = data.milkRecords
+    .filter(r => r.fecha.startsWith(period))
+    .reduce((sum, r) => sum + r.litros, 0);
+  const expensesByCategory: Record<string, number> = {};
+  invoices
+    .filter(i => i.tipo === 'Compra / Gasto')
+    .forEach(i => {
+      expensesByCategory[i.categoria] = (expensesByCategory[i.categoria] ?? 0) + i.importeTotalEuro;
+    });
+  const meatAnimals = active.filter(a => animalMeat(a, farm));
+  const meatValue = meatAnimals.reduce(
+    (sum, a) =>
+      sum +
+      (a.precioEstimadoVentaEuro ??
+        (weightStats(a, data.weightRecords).current ?? 0) * (farm.precioKgCarneEuro ?? 0)),
+    0
+  );
+  const days = new Date(Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0).getDate();
+  const end = period + '-' + String(days).padStart(2, '0');
   return (
     <div className="space-y-6">
-      <div className="card-farm p-5 bg-gradient-to-br from-emerald-900 to-teal-950 text-white shadow-xl">
-        <h2 className="text-xl font-extrabold flex items-center gap-2">
-          <BarChart3 size={24} className="text-emerald-300" />
-          Dashboard de Inteligencia & Analytics Ganadero
-        </h2>
-        <p className="text-xs text-emerald-100/80 mt-1">
-          Visualización en tiempo real del rendimiento sanitario, financiero y productivo de {farmConfig.nombreExplotacion}.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="page-heading">Informes</h1>
+          <p className="mt-2 text-sm text-stone-600">
+            Una visión clara de tu explotación y sus cuentas.
+          </p>
+        </div>
+        <Field label="Periodo del informe">
+          <Input type="month" value={month} onChange={e => setMonth(e.target.value)} />
+        </Field>
       </div>
-
-      {/* Grid of Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Chart 1: Health Status Pie */}
-        <div className="card-farm p-5 space-y-4">
-          <h3 className="font-extrabold text-gray-900 text-sm flex items-center gap-2 border-b border-gray-100 pb-3">
-            <HeartPulse size={18} className="text-emerald-700" />
-            Distribución del Estado Sanitario de la Cabaña
-          </h3>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={healthData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={85}
-                  paddingAngle={4}
-                  dataKey="value"
-                  label={({ name, value }) => `${name}: ${value}`}
-                >
-                  {healthData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={HEALTH_COLORS[entry.name] || '#6B7280'} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [`${value} reses`, 'Cantidad']} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 2: Top Milk Production Bar Chart */}
-        <div className="card-farm p-5 space-y-4">
-          <h3 className="font-extrabold text-gray-900 text-sm flex items-center gap-2 border-b border-gray-100 pb-3">
-            <BarChart3 size={18} className="text-blue-700" />
-            Producción Láctea Diaria por Crotal (Litros/día)
-          </h3>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={milkCowsData}>
-                <XAxis dataKey="crotal" tick={{ fontSize: 10 }} />
-                <YAxis unit=" L" tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(val) => [`${val} L/día`, 'Rendimiento']} />
-                <Bar dataKey="litros" fill="#2563EB" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 3: Financial Balance Comparison */}
-        <div className="card-farm p-5 space-y-4">
-          <h3 className="font-extrabold text-gray-900 text-sm flex items-center gap-2 border-b border-gray-100 pb-3">
-            <TrendingUp size={18} className="text-emerald-700" />
-            Balance Patrimonial: Valor Ganado vs Gastos Registrados (€)
-          </h3>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={financialData}>
-                <XAxis dataKey="concepto" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} unit=" €" />
-                <Tooltip formatter={(val: any) => [`${Number(val).toLocaleString('es-ES')} €`, 'Importe']} />
-                <Bar dataKey="valor" radius={[8, 8, 0, 0]}>
-                  {financialData.map((entry, index) => (
-                    <Cell key={`cell-fin-${index}`} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 4: Breed Composition Bar Chart */}
-        <div className="card-farm p-5 space-y-4">
-          <h3 className="font-extrabold text-gray-900 text-sm flex items-center gap-2 border-b border-gray-100 pb-3">
-            <ShieldCheck size={18} className="text-amber-700" />
-            Composición de Razas Ganaderas
-          </h3>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={breedData}>
-                <XAxis dataKey="raza" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(val) => [`${val} cabezas`, 'Total']} />
-                <Bar dataKey="cantidad" fill="#D97706" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile label="Animales activos hoy" value={active.length} />
+        <StatTile
+          label="Altas del mes"
+          value={data.animals.filter(a => a.fechaAlta.startsWith(period)).length}
+        />
+        <StatTile
+          label="Bajas del mes"
+          value={data.animals.filter(a => a.fechaBaja?.startsWith(period)).length}
+        />
+        <StatTile
+          label="Balance del periodo"
+          value={euro(income - expenses)}
+          help="Ingresos registrados menos gastos."
+        />
+        <StatTile label="Ingresos registrados" value={euro(income)} />
+        <StatTile label="Gastos registrados" value={euro(expenses)} />
+        {hasMilk(farm) && (
+          <>
+            <StatTile label="Litros del mes" value={number(liters) + ' L'} />
+            <StatTile
+              label="Ingreso lácteo estimado"
+              value={euro(liters * (farm.precioLitroLecheEuro ?? 0))}
+              help="No se suma al balance de facturas."
+            />
+          </>
+        )}
+        {hasMeat(farm) && (
+          <StatTile
+            label="Valor estimado de carne hoy"
+            value={euro(meatValue)}
+            help="Solo animales activos; usa el precio actual de Ajustes."
+          />
+        )}
       </div>
+      {!data.animals.length && !data.invoices.length && !data.milkRecords.length && (
+        <Card>
+          <EmptyState
+            title="Tus informes se construirán contigo"
+            description="Da de alta animales y registra producción o facturas. Aquí verás únicamente los resultados de tus datos."
+          />
+        </Card>
+      )}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <DataChart
+          title="Animales activos por especie"
+          data={distribution(active.map(a => especieLabel(a.especie)))}
+          unit="animales"
+        />
+        <DataChart
+          title="Estado sanitario actual"
+          data={distribution(active.map(a => a.estadoSanitario))}
+          unit="animales"
+        />
+        <DataChart
+          title="Gastos por categoría"
+          data={Object.entries(expensesByCategory).map(([label, value]) => ({
+            label: label
+              .replace('Pienso/Alimentación', 'Alimentación')
+              .replace('Veterinario/Sanidad', 'Sanidad')
+              .replace('Maquinaria/Combustible', 'Maquinaria'),
+            value
+          }))}
+          unit="€"
+        />
+        {hasMilk(farm) && (
+          <DataChart
+            title="Producción de leche del mes"
+            data={
+              data.milkRecords.some(r => r.fecha.startsWith(period))
+                ? milkSeries(data.milkRecords, days, end)
+                : []
+            }
+            unit="L"
+            line
+          />
+        )}
+        <DataChart
+          title="Ingresos y gastos del periodo"
+          data={
+            invoices.length
+              ? [
+                  { label: 'Ingresos', value: income },
+                  { label: 'Gastos', value: expenses }
+                ]
+              : []
+          }
+          unit="€"
+        />
+      </div>
+      <p className="text-xs text-stone-600">
+        Las distribuciones muestran el estado actual. El balance usa las facturas del periodo
+        seleccionado; las estimaciones de producción no son ingresos cobrados.
+      </p>
     </div>
   );
-};
+}

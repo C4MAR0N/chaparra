@@ -1,223 +1,371 @@
-import React from 'react';
-import { X, Calendar, MapPin, Baby, Activity, Euro, Edit, Trash2, Tag, FileText, CheckCircle2, AlertTriangle, Scale } from 'lucide-react';
-import { Animal, EstadoSanitario } from '../types';
-
-interface AnimalDetailModalProps {
-  animal: Animal | null;
-  onClose: () => void;
-  onEdit: (animal: Animal) => void;
-  onDelete: (id: string) => void;
-  allAnimals: Animal[];
-}
-
-export const AnimalDetailModal: React.FC<AnimalDetailModalProps> = ({
+import { useState, type FormEvent } from 'react';
+import { Edit, Plus, Trash2 } from 'lucide-react';
+import type { Animal, EstadoSanitario } from '../types';
+import { useFarm } from '../context/FarmContext';
+import {
+  accumulatedCost,
+  age,
+  animalMeat,
+  animalMilk,
+  dateLabel,
+  euro,
+  number,
+  today,
+  uid,
+  weightStats
+} from '../lib/domain';
+import { ESTADOS, especieLabel } from '../lib/constants';
+import {
+  Badge,
+  Banner,
+  Button,
+  ConfirmModal,
+  Field,
+  Input,
+  Modal,
+  Select,
+  StatTile,
+  Textarea
+} from './ui';
+export function AnimalDetailModal({
   animal,
   onClose,
   onEdit,
-  onDelete,
-  allAnimals
-}) => {
-  if (!animal) return null;
-
-  const calculateAge = (birthDateStr: string) => {
-    const birth = new Date(birthDateStr);
-    const now = new Date();
-    let years = now.getFullYear() - birth.getFullYear();
-    let months = now.getMonth() - birth.getMonth();
-    if (months < 0) {
-      years--;
-      months += 12;
+  onSelect
+}: {
+  animal: Animal;
+  onClose: () => void;
+  onEdit: () => void;
+  onSelect: (id: string) => void;
+}) {
+  const { data, farm, update, notify } = useFarm();
+  const [deleting, setDeleting] = useState(false),
+    [baja, setBaja] = useState(false),
+    [healthOpen, setHealthOpen] = useState(false);
+  const [reason, setReason] = useState<NonNullable<Animal['motivoBaja']>>('Vendido'),
+    [bajaDate, setBajaDate] = useState(today());
+  const [health, setHealth] = useState<EstadoSanitario>(animal.estadoSanitario),
+    [notes, setNotes] = useState(''),
+    [cost, setCost] = useState('0'),
+    [healthDate, setHealthDate] = useState(today()),
+    [error, setError] = useState('');
+  const weights = data.weightRecords
+    .filter(r => r.animalId === animal.id)
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const milk = data.milkRecords
+    .filter(r => r.animalId === animal.id)
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const stats = weightStats(animal, data.weightRecords);
+  const value =
+    animal.precioEstimadoVentaEuro ??
+    (stats.current === null ? null : stats.current * (farm.precioKgCarneEuro ?? 0));
+  function addHealth(e: FormEvent) {
+    e.preventDefault();
+    if (
+      healthDate > today() ||
+      healthDate < animal.fechaNacimiento ||
+      !Number.isFinite(Number(cost)) ||
+      Number(cost) < 0
+    ) {
+      setError('Revisa la fecha y el coste de la actuación.');
+      return;
     }
-    return `${years} años y ${months} meses`;
-  };
-
-  const getStatusBadge = (estado: EstadoSanitario) => {
-    switch (estado) {
-      case 'Sano':
-        return 'badge-sano';
-      case 'En tratamiento':
-        return 'badge-tratamiento';
-      case 'En cuarentena':
-        return 'badge-cuarentena';
-      case 'Vacunado':
-        return 'badge-vacunado';
-      case 'Observación':
-        return 'badge-observacion';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const estimatedValue = animal.precioEstimadoVentaEuro || 1600;
-  const accumulatedCost = animal.costeAcumuladoEuro || 650;
-  const netMargin = estimatedValue - accumulatedCost;
-
+    const record = {
+      id: uid(),
+      fecha: healthDate,
+      estado: health,
+      notas: notes.trim(),
+      costeEuro: Number(cost)
+    };
+    update(d => ({
+      ...d,
+      animals: d.animals.map(a =>
+        a.id !== animal.id
+          ? a
+          : {
+              ...a,
+              historialSanitario: [...a.historialSanitario, record],
+              ...(healthDate >= (a.fechaUltimoControl ?? '')
+                ? {
+                    estadoSanitario: health,
+                    notasSanitarias: notes,
+                    fechaUltimoControl: healthDate
+                  }
+                : {})
+            }
+      )
+    }));
+    setHealthOpen(false);
+    setNotes('');
+    setCost('0');
+    notify('Actuación sanitaria registrada.');
+  }
   return (
-    <div className="modal-overlay">
-      <div className="modal-container p-6 space-y-6">
-        {/* Header Modal */}
-        <div className="flex items-start justify-between border-b border-gray-100 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-800 text-emerald-100 p-3 rounded-2xl font-mono text-xl font-black shadow-inner">
-              🏷️
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-2xl font-black text-gray-900 font-mono tracking-tight">{animal.crotal}</h2>
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusBadge(animal.estadoSanitario)}`}>
-                  {animal.estadoSanitario}
-                </span>
-              </div>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">
-                {animal.raza} • {animal.sexo} • {animal.tipoGanado} ({animal.proposito})
-              </p>
-            </div>
+    <Modal title={animal.crotal} onClose={onClose} wide>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge>{animal.estadoSanitario}</Badge>
+        {!animal.activo && <Badge>De baja · {animal.motivoBaja}</Badge>}
+        <p className="text-sm text-stone-600">
+          {especieLabel(animal.especie)} · {animal.raza || 'Raza sin indicar'} · {animal.sexo}
+        </p>
+      </div>
+      <dl className="grid grid-cols-2 gap-4 rounded-xl bg-stone-50 p-4 text-sm">
+        {[
+          ['Nacimiento', dateLabel(animal.fechaNacimiento)],
+          ['Edad', age(animal.fechaNacimiento)],
+          ['Ubicación', animal.ubicacion || 'Sin indicar'],
+          ['Partos', String(animal.numeroPartos)],
+          [
+            'Última revisión',
+            animal.fechaUltimoControl ? dateLabel(animal.fechaUltimoControl) : 'Sin revisión'
+          ],
+          ['Alta', dateLabel(animal.fechaAlta)]
+        ].map(([label, v]) => (
+          <div key={label}>
+            <dt className="text-stone-600">{label}</dt>
+            <dd className="mt-1 break-words font-semibold">{v}</dd>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Visual Crotal Ear Tag Badge */}
-        <div className="bg-amber-100 border-2 border-amber-300 rounded-2xl p-4 flex items-center justify-between text-amber-950 shadow-sm">
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-amber-800">Crotal Oficial España / UE</span>
-            <p className="text-xl font-black font-mono tracking-wider">{animal.crotal}</p>
+        ))}
+      </dl>
+      {!animal.activo && (
+        <Banner>
+          Animal de baja desde{' '}
+          {animal.fechaBaja ? dateLabel(animal.fechaBaja) : 'fecha sin indicar'}. Su historial se
+          conserva.
+        </Banner>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <StatTile
+          label="Coste acumulado"
+          value={euro(accumulatedCost(animal))}
+          help="Coste inicial más actuaciones sanitarias. Las facturas no se suman automáticamente."
+        />
+        {animalMeat(animal, farm) && (
+          <StatTile
+            label="Valor estimado de venta"
+            value={value === null ? 'Sin peso registrado' : euro(value)}
+            help="Estimación; no es un ingreso cobrado."
+          />
+        )}
+      </div>
+      <section className="space-y-3">
+        <h3 className="section-heading">Crías asociadas</h3>
+        {animal.criasAsociadas.length ? (
+          <div className="flex flex-wrap gap-2">
+            {animal.criasAsociadas.map(id => {
+              const child = data.animals.find(a => a.id === id);
+              return child ? (
+                <Button
+                  key={id}
+                  variant="secondary"
+                  className="tracking-tight"
+                  onClick={() => onSelect(id)}
+                >
+                  {child.crotal}
+                </Button>
+              ) : null;
+            })}
           </div>
-          <div className="text-right">
-            <span className="text-xs font-semibold text-amber-900 block">Explotación</span>
-            <span className="text-xs font-bold text-amber-800">REG. OFICIAL ACREDITADO</span>
-          </div>
-        </div>
-
-        {/* Main Grid Info */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <div className="bg-gray-50 p-3 rounded-xl border border-gray-200/80">
-            <span className="text-xs text-gray-500 font-semibold flex items-center gap-1">
-              <Calendar size={13} className="text-emerald-700" /> Nacimiento
-            </span>
-            <p className="font-bold text-gray-900 text-sm mt-1">{animal.fechaNacimiento}</p>
-            <p className="text-[11px] text-gray-500">{calculateAge(animal.fechaNacimiento)}</p>
-          </div>
-
-          <div className="bg-gray-50 p-3 rounded-xl border border-gray-200/80">
-            <span className="text-xs text-gray-500 font-semibold flex items-center gap-1">
-              <Baby size={13} className="text-emerald-700" /> Partos Registrados
-            </span>
-            <p className="font-bold text-gray-900 text-sm mt-1">{animal.numeroPartos} partos</p>
-            <p className="text-[11px] text-gray-500">{animal.criasAsociadas.length} crías asociadas</p>
-          </div>
-
-          <div className="bg-gray-50 p-3 rounded-xl border border-gray-200/80 col-span-2 sm:col-span-1">
-            <span className="text-xs text-gray-500 font-semibold flex items-center gap-1">
-              <MapPin size={13} className="text-emerald-700" /> Ubicación Actual
-            </span>
-            <p className="font-bold text-emerald-900 text-sm mt-1">{animal.ubicacion}</p>
-            <p className="text-[11px] text-gray-500">Último cambio trazado</p>
-          </div>
-        </div>
-
-        {/* Offspring Lineage (Crías Asociadas) */}
-        <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-2">
-          <h3 className="font-bold text-emerald-950 text-sm flex items-center gap-1.5">
-            <Baby size={16} className="text-emerald-700" />
-            Crías Asociadas y Genealogía ({animal.criasAsociadas.length})
-          </h3>
-          {animal.criasAsociadas.length > 0 ? (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {animal.criasAsociadas.map((crotalCria) => {
-                const matchedCria = allAnimals.find(a => a.crotal === crotalCria);
-                return (
-                  <div
-                    key={crotalCria}
-                    className="bg-white px-3 py-1.5 rounded-lg border border-emerald-200 text-xs font-mono font-bold text-emerald-900 flex items-center gap-2 shadow-xs"
-                  >
-                    <span>🍼 {crotalCria}</span>
-                    {matchedCria && (
-                      <span className="font-sans text-[10px] text-gray-500 bg-emerald-50 px-1.5 py-0.5 rounded">
-                        {matchedCria.raza}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-xs text-gray-500 italic">No hay crotales de crías asociadas a esta res aún.</p>
-          )}
-        </div>
-
-        {/* Production & Profitability in EUROS (€) */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-3">
-          <h3 className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
-            <Euro size={16} className="text-emerald-700" />
-            Balance Económico & Rentabilidad de la Res
-          </h3>
-
-          <div className="grid grid-cols-3 gap-2 text-center text-xs">
-            <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-100">
-              <span className="text-gray-600 font-semibold block">Valor Venta (€)</span>
-              <span className="text-emerald-900 font-extrabold text-sm mt-0.5 block">{estimatedValue.toLocaleString('es-ES')} €</span>
-            </div>
-
-            <div className="bg-red-50 p-2.5 rounded-lg border border-red-100">
-              <span className="text-gray-600 font-semibold block">Coste Acumulado (€)</span>
-              <span className="text-red-900 font-extrabold text-sm mt-0.5 block">{accumulatedCost.toLocaleString('es-ES')} €</span>
-            </div>
-
-            <div className="bg-blue-50 p-2.5 rounded-lg border border-blue-100">
-              <span className="text-gray-600 font-semibold block">Margen Neto (€)</span>
-              <span className="text-blue-900 font-extrabold text-sm mt-0.5 block">+{netMargin.toLocaleString('es-ES')} €</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Health & Clinical Notes */}
-        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-2">
-          <h3 className="font-bold text-gray-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
-            <Activity size={15} className="text-emerald-700" /> Historial de Registro Sanitario
-          </h3>
-          <p className="text-xs text-gray-700 leading-relaxed bg-white p-3 rounded-lg border border-gray-200">
-            {animal.notasSanitarias || 'Sin observaciones veterinarias registradas. Estado de salud conforme.'}
+        ) : (
+          <p className="text-sm text-stone-600">
+            No hay crías vinculadas. Puedes asociarlas al editar la ficha.
           </p>
+        )}
+      </section>
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="section-heading">Historial sanitario</h3>
+          <Button variant="secondary" onClick={() => setHealthOpen(!healthOpen)}>
+            <Plus size={18} />
+            Añadir actuación
+          </Button>
         </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-          <button
-            onClick={() => {
-              if (window.confirm(`¿Estás seguro de eliminar el registro de la res ${animal.crotal}?`)) {
-                onDelete(animal.id);
-                onClose();
-              }
-            }}
-            className="text-red-600 hover:text-red-800 text-xs font-bold flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors"
-          >
-            <Trash2 size={16} /> Eliminar Res
-          </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                onEdit(animal);
-                onClose();
-              }}
-              className="btn-farm-secondary text-xs"
-            >
-              <Edit size={16} /> Editar Datos
-            </button>
-            <button
-              onClick={onClose}
-              className="btn-farm-primary text-xs"
-            >
-              Cerrar
-            </button>
-          </div>
+        {healthOpen && (
+          <form className="space-y-4 rounded-xl border border-stone-200 p-4" onSubmit={addHealth}>
+            <div className="form-grid">
+              <Field label="Fecha de actuación">
+                <Input
+                  type="date"
+                  min={animal.fechaNacimiento}
+                  max={today()}
+                  required
+                  value={healthDate}
+                  onChange={e => setHealthDate(e.target.value)}
+                />
+              </Field>
+              <Field label="Estado tras la actuación">
+                <Select value={health} onChange={e => setHealth(e.target.value as EstadoSanitario)}>
+                  {ESTADOS.map(s => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Coste de la actuación (€)">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={cost}
+                  required
+                  onChange={e => setCost(e.target.value)}
+                />
+              </Field>
+            </div>
+            <Field label="Tratamiento u observaciones">
+              <Textarea value={notes} onChange={e => setNotes(e.target.value)} required rows={3} />
+            </Field>
+            {error && <Banner tone="error">{error}</Banner>}
+            <Button type="submit">Guardar actuación</Button>
+          </form>
+        )}
+        {animal.historialSanitario.length ? (
+          <ol className="divide-y divide-stone-200">
+            {[...animal.historialSanitario]
+              .sort((a, b) => b.fecha.localeCompare(a.fecha))
+              .map(r => (
+                <li key={r.id} className="space-y-2 py-3">
+                  <div className="flex flex-wrap justify-between gap-2 text-sm">
+                    <span>
+                      {dateLabel(r.fecha)} · {euro(r.costeEuro)}
+                    </span>
+                    <Badge>{r.estado}</Badge>
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm text-stone-600">{r.notas}</p>
+                </li>
+              ))}
+          </ol>
+        ) : (
+          <p className="text-sm text-stone-600">No hay actuaciones sanitarias registradas.</p>
+        )}
+      </section>
+      {animalMeat(animal, farm) && (
+        <section className="space-y-3">
+          <h3 className="section-heading">Pesadas</h3>
+          <p className="text-sm text-stone-600">
+            GMD entre las dos últimas pesadas:{' '}
+            {stats.gmd === null ? 'faltan dos fechas distintas' : number(stats.gmd, 3) + ' kg/día'}.
+          </p>
+          {animal.pesoCanalKg !== undefined && (
+            <p className="text-sm">Peso de canal: {number(animal.pesoCanalKg)} kg.</p>
+          )}
+          {weights.length ? (
+            <ul className="divide-y divide-stone-200">
+              {weights.map(r => (
+                <li key={r.id} className="py-3 text-sm">
+                  {dateLabel(r.fecha)} · <strong>{number(r.pesoKg)} kg</strong>
+                  {r.notas && <p className="text-stone-600">{r.notas}</p>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-stone-600">Registra las pesadas en Producción.</p>
+          )}
+        </section>
+      )}
+      {animalMilk(animal, farm) && (
+        <section className="space-y-3">
+          <h3 className="section-heading">Registros de leche</h3>
+          {milk.length ? (
+            <ul className="divide-y divide-stone-200">
+              {milk.map(r => (
+                <li key={r.id} className="py-3 text-sm">
+                  {dateLabel(r.fecha)} · Ordeño {r.ordeno ?? 1} ·{' '}
+                  <strong>{number(r.litros)} litros</strong>
+                  {r.notas && <p className="text-stone-600">{r.notas}</p>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-stone-600">
+              Todavía no hay registros individuales de leche.
+            </p>
+          )}
+        </section>
+      )}
+      <div className="flex flex-wrap justify-between gap-3 border-t border-stone-200 pt-4">
+        <Button variant="ghost" className="text-red-800" onClick={() => setDeleting(true)}>
+          <Trash2 size={18} />
+          Eliminar
+        </Button>
+        <div className="flex flex-wrap gap-2">
+          {animal.activo && (
+            <Button variant="secondary" onClick={() => setBaja(true)}>
+              Dar de baja
+            </Button>
+          )}
+          <Button onClick={onEdit}>
+            <Edit size={18} />
+            Editar
+          </Button>
         </div>
       </div>
-    </div>
+      {deleting && (
+        <ConfirmModal
+          title="Eliminar animal e historial"
+          onClose={() => setDeleting(false)}
+          onConfirm={() => {
+            update(d => ({
+              ...d,
+              animals: d.animals
+                .filter(a => a.id !== animal.id)
+                .map(a => ({
+                  ...a,
+                  criasAsociadas: a.criasAsociadas.filter(id => id !== animal.id)
+                })),
+              milkRecords: d.milkRecords.filter(r => r.animalId !== animal.id),
+              weightRecords: d.weightRecords.filter(r => r.animalId !== animal.id)
+            }));
+            notify('Animal e historial eliminados.');
+            onClose();
+          }}
+        >
+          Se eliminará {animal.crotal}, su historial sanitario y sus registros individuales de
+          producción. Las facturas se conservan. Para conservar el historial, utiliza Dar de baja.
+        </ConfirmModal>
+      )}
+      {baja && (
+        <Modal title="Dar de baja sin borrar el historial" onClose={() => setBaja(false)}>
+          <form
+            className="space-y-4"
+            onSubmit={e => {
+              e.preventDefault();
+              update(d => ({
+                ...d,
+                animals: d.animals.map(a =>
+                  a.id === animal.id
+                    ? { ...a, activo: false, motivoBaja: reason, fechaBaja: bajaDate }
+                    : a
+                )
+              }));
+              setBaja(false);
+              notify('Baja registrada. El historial se conserva.');
+            }}
+          >
+            <Field label="Motivo de baja">
+              <Select
+                value={reason}
+                onChange={e => setReason(e.target.value as NonNullable<Animal['motivoBaja']>)}
+              >
+                {['Vendido', 'Muerto', 'Sacrificado', 'Otro'].map(r => (
+                  <option key={r}>{r}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Fecha de baja">
+              <Input
+                type="date"
+                min={animal.fechaAlta}
+                max={today()}
+                value={bajaDate}
+                onChange={e => setBajaDate(e.target.value)}
+                required
+              />
+            </Field>
+            <Button type="submit">Confirmar baja</Button>
+          </form>
+        </Modal>
+      )}
+    </Modal>
   );
-};
+}

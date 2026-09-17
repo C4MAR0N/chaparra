@@ -1,358 +1,465 @@
-import React, { useState } from 'react';
-import { Milk, Scale, Euro, TrendingUp, AlertCircle, RefreshCw, CheckCircle, Calculator, PieChart } from 'lucide-react';
-import { Animal, FarmConfig } from '../types';
-
-interface ProductionModuleProps {
-  farmConfig: FarmConfig;
-  animals: Animal[];
-  onUpdateFarmConfig: (config: FarmConfig) => void;
-  onUpdateAnimal: (animal: Animal) => void;
-}
-
-export const ProductionModule: React.FC<ProductionModuleProps> = ({
-  farmConfig,
-  animals,
-  onUpdateFarmConfig,
-  onUpdateAnimal
-}) => {
-  const [activeTab, setActiveTab] = useState<'ordeno' | 'carne'>(
-    farmConfig.propositoPrincipal === 'Ordeño' ? 'ordeno' : 'carne'
-  );
-
-  // Ordeño Metrics
-  const milkingCows = animals.filter(a => a.proposito === 'Ordeño' || a.proposito === 'Mixto');
-  const totalDailyLiters = milkingCows.reduce((acc, a) => acc + (a.produccionDiariaLitros || 0), 0);
-  const dailyMilkRevenueEuro = totalDailyLiters * farmConfig.precioPorLitroLecheEuro;
-  const monthlyMilkRevenueEuro = dailyMilkRevenueEuro * 30;
-
-  // Carne Metrics
-  const meatCows = animals.filter(a => a.proposito === 'Carne' || a.proposito === 'Mixto');
-  const totalMeatAssetValueEuro = meatCows.reduce((acc, a) => acc + (a.precioEstimadoVentaEuro || (a.pesoKg ? a.pesoKg * farmConfig.precioEstimadoKgCarneEuro : 1600)), 0);
-  const totalCostsEuro = meatCows.reduce((acc, a) => acc + (a.costeAcumuladoEuro || 650), 0);
-  const totalMeatNetMarginEuro = totalMeatAssetValueEuro - totalCostsEuro;
-  const marginPercentage = totalCostsEuro > 0 ? ((totalMeatNetMarginEuro / totalCostsEuro) * 100).toFixed(1) : '0';
-
-  const handleMilkingFrequencyChange = (veces: number) => {
-    onUpdateFarmConfig({
-      ...farmConfig,
-      vecesOrdenoDia: veces
-    });
-  };
-
-  const handleMilkPriceChange = (price: number) => {
-    onUpdateFarmConfig({
-      ...farmConfig,
-      precioPorLitroLecheEuro: price
-    });
-  };
-
-  const handleMeatPriceChange = (pricePerKg: number) => {
-    onUpdateFarmConfig({
-      ...farmConfig,
-      precioEstimadoKgCarneEuro: pricePerKg
-    });
-  };
-
+import { useState, type FormEvent } from 'react';
+import { Milk, Plus, Scale, Trash2 } from 'lucide-react';
+import { useFarm } from '../context/FarmContext';
+import {
+  animalMeat,
+  animalMilk,
+  dateLabel,
+  euro,
+  hasMeat,
+  hasMilk,
+  milkSeries,
+  number,
+  euroRate,
+  today,
+  uid,
+  weightStats
+} from '../lib/domain';
+import type { MilkRecord, WeightRecord } from '../types';
+import {
+  Button,
+  Card,
+  ConfirmModal,
+  EmptyState,
+  Field,
+  Input,
+  SegmentedControl,
+  Select,
+  StatTile,
+  Textarea
+} from './ui';
+import { DataChart } from './Charts';
+export function ProductionModule({ onAnimals }: { onAnimals: () => void }) {
+  const { farm } = useFarm();
+  const milk = hasMilk(farm),
+    meat = hasMeat(farm);
+  const [tab, setTab] = useState<'milk' | 'meat'>(milk ? 'milk' : 'meat');
+  const activeTab = milk && meat ? tab : milk ? 'milk' : 'meat';
   return (
     <div className="space-y-6">
-      {/* Mode Switcher */}
-      <div className="card-farm p-2 bg-emerald-950/5 border-emerald-200/60 flex items-center gap-2">
-        <button
-          onClick={() => setActiveTab('ordeno')}
-          className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-            activeTab === 'ordeno'
-              ? 'bg-emerald-800 text-white shadow-md'
-              : 'text-gray-600 hover:text-emerald-900 hover:bg-white/50'
-          }`}
-        >
-          <Milk size={18} />
-          <span>Explotación de Ordeño / Leche</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('carne')}
-          className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-            activeTab === 'carne'
-              ? 'bg-emerald-800 text-white shadow-md'
-              : 'text-gray-600 hover:text-emerald-900 hover:bg-white/50'
-          }`}
-        >
-          <Scale size={18} />
-          <span>Explotación de Carne & Rentabilidad</span>
-        </button>
+      <div>
+        <h1 className="page-heading">Producción</h1>
+        <p className="mt-2 text-sm text-stone-600">
+          Registra lo que ocurre en el campo y sigue su evolución.
+        </p>
       </div>
-
-      {/* SECTION 1: ORDEÑO (MILKING) */}
-      {activeTab === 'ordeno' && (
-        <div className="space-y-6">
-          {/* Farm Ordeño Config Banner */}
-          <div className="card-farm p-5 bg-gradient-to-br from-blue-900 to-indigo-950 text-white space-y-4 shadow-xl">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/15 pb-4">
-              <div>
-                <span className="text-xs uppercase font-extrabold tracking-widest text-blue-300">Configuración de Ordeño</span>
-                <h2 className="text-xl font-extrabold text-white mt-0.5">Control de Frecuencia y Rendimiento Lácteo</h2>
-              </div>
-              <div className="bg-white/10 px-3 py-1.5 rounded-xl text-xs font-mono text-blue-200 border border-white/20">
-                Lote activo: {milkingCows.length} reses
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              {/* Milking frequency picker */}
-              <div className="bg-white/10 p-3.5 rounded-xl border border-white/10 space-y-2">
-                <label className="block font-bold text-blue-200">Veces que se ordeñan al día</label>
-                <div className="flex gap-2">
-                  {[1, 2, 3].map((num) => (
-                    <button
-                      key={num}
-                      onClick={() => handleMilkingFrequencyChange(num)}
-                      className={`flex-1 py-2 rounded-lg font-extrabold text-sm transition-all border ${
-                        farmConfig.vecesOrdenoDia === num
-                          ? 'bg-blue-400 text-blue-950 border-white shadow-md'
-                          : 'bg-white/5 text-white hover:bg-white/20 border-white/20'
-                      }`}
-                    >
-                      {num} {num === 1 ? 'Ordeño / día' : 'Ordeños / día'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Price per Liter Config */}
-              <div className="bg-white/10 p-3.5 rounded-xl border border-white/10 space-y-2">
-                <label className="block font-bold text-blue-200">Precio Cobrado por Litro de Leche (€/L)</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={farmConfig.precioPorLitroLecheEuro}
-                    onChange={(e) => handleMilkPriceChange(Number(e.target.value))}
-                    className="w-full bg-white text-gray-900 font-extrabold text-base px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  />
-                  <span className="font-extrabold text-blue-300 text-base">€ / Litro</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ordeño Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="card-farm p-4 border-blue-200 bg-blue-50/50">
-              <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Producción Diaria Total</span>
-              <p className="text-3xl font-black text-blue-950 mt-1">
-                {totalDailyLiters.toFixed(1)} <span className="text-base font-bold text-blue-700">Litros / día</span>
-              </p>
-              <p className="text-xs text-blue-700 mt-1 font-medium">
-                Promedio: {(milkingCows.length ? totalDailyLiters / milkingCows.length : 0).toFixed(1)} L/vaca
-              </p>
-            </div>
-
-            <div className="card-farm p-4 border-emerald-200 bg-emerald-50/50">
-              <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Ingreso Estimado Diario</span>
-              <p className="text-3xl font-black text-emerald-950 mt-1">
-                {dailyMilkRevenueEuro.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-              </p>
-              <p className="text-xs text-emerald-700 mt-1 font-medium">
-                A {farmConfig.precioPorLitroLecheEuro} €/L
-              </p>
-            </div>
-
-            <div className="card-farm p-4 border-indigo-200 bg-indigo-50/50">
-              <span className="text-xs font-bold text-indigo-800 uppercase tracking-wider">Proyección Mensual (30d)</span>
-              <p className="text-3xl font-black text-indigo-950 mt-1">
-                {monthlyMilkRevenueEuro.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-              </p>
-              <p className="text-xs text-indigo-700 mt-1 font-medium">
-                {farmConfig.vecesOrdenoDia} turnos diarios programados
-              </p>
-            </div>
-          </div>
-
-          {/* Table of Milking Animals */}
-          <div className="card-farm p-5 space-y-3">
-            <h3 className="font-extrabold text-gray-900 text-base flex items-center gap-2">
-              <span>🥛</span> Rendimiento por Vaca de Ordeño
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-gray-100 text-gray-700 font-bold">
-                    <th className="p-3">Crotal</th>
-                    <th className="p-3">Raza</th>
-                    <th className="p-3">Partos</th>
-                    <th className="p-3">Litros / Día</th>
-                    <th className="p-3 text-right">Ingreso Diario (€)</th>
-                    <th className="p-3 text-center">Ajuste Rápido</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 font-medium">
-                  {milkingCows.map((animal) => {
-                    const cowRevenue = (animal.produccionDiariaLitros || 0) * farmConfig.precioPorLitroLecheEuro;
-                    return (
-                      <tr key={animal.id} className="hover:bg-blue-50/40">
-                        <td className="p-3 font-mono font-bold text-blue-950">{animal.crotal}</td>
-                        <td className="p-3">{animal.raza}</td>
-                        <td className="p-3 font-bold">{animal.numeroPartos}</td>
-                        <td className="p-3">
-                          <span className="font-extrabold text-blue-900 text-sm">{animal.produccionDiariaLitros || 0} L</span>
-                        </td>
-                        <td className="p-3 text-right font-bold text-emerald-800">
-                          {cowRevenue.toFixed(2)} €
-                        </td>
-                        <td className="p-3 text-center">
-                          <input
-                            type="number"
-                            step="0.5"
-                            value={animal.produccionDiariaLitros || 0}
-                            onChange={(e) => {
-                              onUpdateAnimal({
-                                ...animal,
-                                produccionDiariaLitros: Number(e.target.value)
-                              });
-                            }}
-                            className="w-20 bg-white border border-gray-300 rounded px-2 py-1 text-center font-bold text-xs"
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+      {milk && meat && (
+        <SegmentedControl
+          label="Tipo de producción"
+          value={tab}
+          options={[
+            { value: 'milk', label: 'Leche' },
+            { value: 'meat', label: 'Carne' }
+          ]}
+          onChange={setTab}
+        />
       )}
-
-      {/* SECTION 2: CARNE & RENTABILIDAD (MEAT & PROFITABILITY) */}
-      {activeTab === 'carne' && (
-        <div className="space-y-6">
-          {/* Farm Meat Config Banner */}
-          <div className="card-farm p-5 bg-gradient-to-br from-emerald-900 to-green-950 text-white space-y-4 shadow-xl">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/15 pb-4">
-              <div>
-                <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-300">Cálculo de Rentabilidad Ganadera</span>
-                <h2 className="text-xl font-extrabold text-white mt-0.5">Control de Costes y Margen de Venta de Carne (€)</h2>
-              </div>
-              <div className="bg-white/10 px-3 py-1.5 rounded-xl text-xs font-mono text-emerald-200 border border-white/20">
-                Lote de carne: {meatCows.length} reses
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              {/* Meat Price per Kg Config */}
-              <div className="bg-white/10 p-3.5 rounded-xl border border-white/10 space-y-2">
-                <label className="block font-bold text-emerald-200">Precio de Venta Estimado de Carne (€/kg en vivo)</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    step="0.10"
-                    value={farmConfig.precioEstimadoKgCarneEuro}
-                    onChange={(e) => handleMeatPriceChange(Number(e.target.value))}
-                    className="w-full bg-white text-gray-900 font-extrabold text-base px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                  />
-                  <span className="font-extrabold text-emerald-300 text-base">€ / kg</span>
-                </div>
-              </div>
-
-              {/* Profitability Index Summary */}
-              <div className="bg-white/10 p-3.5 rounded-xl border border-white/10 flex flex-col justify-between">
-                <span className="font-bold text-emerald-200">Índice de Rentabilidad Explotación</span>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-2xl font-black text-emerald-300">+{marginPercentage}%</span>
-                  <span className="text-emerald-100/80 text-xs">Retorno estimado sobre costes</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Profitability Summary Cards in EUROS */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="card-farm p-4 border-green-200 bg-green-50/50">
-              <span className="text-xs font-bold text-green-800 uppercase tracking-wider">Valor Bruto Venta Lote</span>
-              <p className="text-3xl font-black text-green-950 mt-1">
-                {totalMeatAssetValueEuro.toLocaleString('es-ES')} €
-              </p>
-              <p className="text-xs text-green-700 mt-1 font-medium">
-                {meatCows.length} reses valoradas
-              </p>
-            </div>
-
-            <div className="card-farm p-4 border-red-200 bg-red-50/50">
-              <span className="text-xs font-bold text-red-800 uppercase tracking-wider">Costes Acumulados (Pienso+Vet)</span>
-              <p className="text-3xl font-black text-red-950 mt-1">
-                {totalCostsEuro.toLocaleString('es-ES')} €
-              </p>
-              <p className="text-xs text-red-700 mt-1 font-medium">
-                Inversión en alimentación y sanidad
-              </p>
-            </div>
-
-            <div className="card-farm p-4 border-emerald-300 bg-emerald-100/60">
-              <span className="text-xs font-extrabold text-emerald-900 uppercase tracking-wider">MARGEN NETO LIMPIO</span>
-              <p className="text-3xl font-black text-emerald-950 mt-1">
-                +{totalMeatNetMarginEuro.toLocaleString('es-ES')} €
-              </p>
-              <p className="text-xs text-emerald-800 mt-1 font-bold">
-                Beneficio real de la explotación ganadera
-              </p>
-            </div>
-          </div>
-
-          {/* Detailed Animal Rentability Table */}
-          <div className="card-farm p-5 space-y-3">
-            <h3 className="font-extrabold text-gray-900 text-base flex items-center gap-2">
-              <span>🥩</span> Desglose de Rentabilidad por Crotal
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-emerald-900 text-white font-bold">
-                    <th className="p-3">Crotal</th>
-                    <th className="p-3">Raza</th>
-                    <th className="p-3">Peso (kg)</th>
-                    <th className="p-3">Valor Est. (€)</th>
-                    <th className="p-3">Coste Acum. (€)</th>
-                    <th className="p-3 text-right">Beneficio Neto (€)</th>
-                    <th className="p-3 text-center">Estado Rentabilidad</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 font-medium">
-                  {meatCows.map((animal) => {
-                    const value = animal.precioEstimadoVentaEuro || (animal.pesoKg ? animal.pesoKg * farmConfig.precioEstimadoKgCarneEuro : 1600);
-                    const cost = animal.costeAcumuladoEuro || 650;
-                    const margin = value - cost;
-                    const isHighMargin = margin > 800;
-
-                    return (
-                      <tr key={animal.id} className="hover:bg-emerald-50/40">
-                        <td className="p-3 font-mono font-bold text-emerald-950">{animal.crotal}</td>
-                        <td className="p-3">{animal.raza}</td>
-                        <td className="p-3 font-bold">{animal.pesoKg || 0} kg</td>
-                        <td className="p-3 font-extrabold text-gray-900">{value.toLocaleString('es-ES')} €</td>
-                        <td className="p-3 text-red-700 font-semibold">{cost.toLocaleString('es-ES')} €</td>
-                        <td className="p-3 text-right font-black text-emerald-900 text-sm">
-                          +{margin.toLocaleString('es-ES')} €
-                        </td>
-                        <td className="p-3 text-center">
-                          {isHighMargin ? (
-                            <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold text-[10px] border border-emerald-300">
-                              Alta Rentabilidad
-                            </span>
-                          ) : (
-                            <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold text-[10px] border border-amber-300">
-                              Normal
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+      {activeTab === 'milk' ? <MilkProduction /> : <MeatProduction onAnimals={onAnimals} />}
     </div>
   );
-};
+}
+function MilkProduction() {
+  const { data, farm, update, notify } = useFarm();
+  const records = data.milkRecords;
+  const last = [...records].sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+  const [fecha, setFecha] = useState(today()),
+    [animalId, setAnimalId] = useState(''),
+    [ordeno, setOrdeno] = useState<1 | 2 | 3>(1),
+    [litros, setLitros] = useState(last ? String(last.litros) : ''),
+    [notas, setNotas] = useState(''),
+    [error, setError] = useState(''),
+    [deleting, setDeleting] = useState<MilkRecord | null>(null);
+  const animals = data.animals.filter(a => a.activo && animalMilk(a, farm));
+  const series = milkSeries(records, 30);
+  const total = records.filter(r => r.fecha === fecha).reduce((sum, r) => sum + r.litros, 0);
+  const average = (days: number) =>
+    milkSeries(records, days).reduce((sum, r) => sum + r.value, 0) / days;
+  function defaults(id: string, turn: 1 | 2 | 3) {
+    const previous = [...records]
+      .filter(r => (r.animalId ?? '') === id && r.ordeno === turn)
+      .sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+    setLitros(previous ? String(previous.litros) : '');
+  }
+  function save(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    const amount = Number(litros);
+    if (!Number.isFinite(amount) || amount < 0 || !litros.trim()) {
+      setError('Introduce una cantidad de litros no negativa.');
+      return;
+    }
+    const same = records.filter(r => r.fecha === fecha && (r.ordeno ?? 1) === ordeno);
+    if (same.some(r => (r.animalId ?? '') === animalId)) {
+      setError(
+        'Ya hay un registro para esa fecha, ordeño y animal o conjunto. Elimina el registro incorrecto antes de sustituirlo.'
+      );
+      return;
+    }
+    if (same.some(r => !!r.animalId !== !!animalId)) {
+      setError(
+        'En un mismo ordeño registra el total de la explotación o los animales por separado, para evitar contar la leche dos veces.'
+      );
+      return;
+    }
+    const a = animals.find(a => a.id === animalId);
+    if (a && fecha < a.fechaNacimiento) {
+      setError('La fecha no puede ser anterior al nacimiento del animal.');
+      return;
+    }
+    const row: MilkRecord = {
+      id: uid(),
+      fecha,
+      animalId: animalId || undefined,
+      ordeno,
+      litros: amount,
+      notas
+    };
+    update(d => ({ ...d, milkRecords: [...d.milkRecords, row] }));
+    setNotas('');
+    notify('Producción registrada.');
+  }
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile label="Total del día seleccionado" value={number(total) + ' L'} icon={Milk} />
+        <StatTile label="Media diaria · 7 días" value={number(average(7)) + ' L'} />
+        <StatTile label="Media diaria · 30 días" value={number(average(30)) + ' L'} />
+        <StatTile
+          label="Ingreso estimado del día"
+          value={euro(total * (farm.precioLitroLecheEuro ?? 0))}
+          help={euroRate(farm.precioLitroLecheEuro ?? 0, 'litro')}
+        />
+      </div>
+      <div className="grid items-start gap-6 xl:grid-cols-2">
+        <Card className="space-y-4">
+          <h2 className="section-heading">Registrar ordeño</h2>
+          <form onSubmit={save} className="space-y-4">
+            <div className="form-grid">
+              <Field label="Fecha">
+                <Input
+                  type="date"
+                  max={today()}
+                  value={fecha}
+                  onChange={e => setFecha(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Ordeño">
+                <Select
+                  value={ordeno}
+                  onChange={e => {
+                    const n = Number(e.target.value) as 1 | 2 | 3;
+                    setOrdeno(n);
+                    defaults(animalId, n);
+                  }}
+                >
+                  {Array.from({ length: farm.ordenosPorDia ?? 2 }, (_, i) => (
+                    <option key={i} value={i + 1}>
+                      Ordeño {i + 1}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <Field
+              label="Animal o conjunto"
+              help="Registra un total por ordeño o registros individuales, sin mezclarlos."
+            >
+              <Select
+                value={animalId}
+                onChange={e => {
+                  setAnimalId(e.target.value);
+                  defaults(e.target.value, ordeno);
+                }}
+              >
+                <option value="">Toda la explotación</option>
+                {animals.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.crotal}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Litros" error={error}>
+              <Input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={litros}
+                onChange={e => setLitros(e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Notas (opcional)">
+              <Textarea rows={2} value={notas} onChange={e => setNotas(e.target.value)} />
+            </Field>
+            <Button type="submit" className="w-full">
+              <Plus size={18} />
+              Guardar ordeño
+            </Button>
+          </form>
+        </Card>
+        <div className="space-y-3">
+          <DataChart
+            title="Evolución de los últimos 30 días"
+            data={records.length ? series : []}
+            unit="L"
+            line
+          />
+          <p className="text-xs text-stone-600">
+            Las medias se calculan sobre días naturales hasta hoy. Los días sin registro cuentan
+            como cero; completa los registros para obtener una media representativa.
+          </p>
+        </div>
+      </div>
+      <Card>
+        <h2 className="section-heading">Historial de registros</h2>
+        {!records.length ? (
+          <EmptyState
+            icon={Milk}
+            title="Aún no has registrado producción"
+            description="Guarda el primer ordeño con el formulario. Los totales y la gráfica se calcularán a partir de tus registros."
+          />
+        ) : (
+          <ul className="divide-y divide-stone-200">
+            {[...records]
+              .sort((a, b) => b.fecha.localeCompare(a.fecha))
+              .map(r => (
+                <li key={r.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="text-sm">
+                    <p className="font-semibold">
+                      {dateLabel(r.fecha)} · Ordeño {r.ordeno ?? 1} · {number(r.litros)} L
+                    </p>
+                    <p className="mt-1 text-stone-600">
+                      {r.animalId
+                        ? data.animals.find(a => a.id === r.animalId)?.crotal
+                        : 'Toda la explotación'}
+                    </p>
+                    {r.notas && <p className="mt-1 text-stone-600">{r.notas}</p>}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    aria-label={'Eliminar registro del ' + dateLabel(r.fecha)}
+                    onClick={() => setDeleting(r)}
+                  >
+                    <Trash2 size={18} />
+                  </Button>
+                </li>
+              ))}
+          </ul>
+        )}
+      </Card>
+      {deleting && (
+        <ConfirmModal
+          title="Eliminar registro de producción"
+          onClose={() => setDeleting(null)}
+          onConfirm={() => {
+            update(d => ({ ...d, milkRecords: d.milkRecords.filter(r => r.id !== deleting.id) }));
+            setDeleting(null);
+            notify('Registro eliminado.');
+          }}
+        >
+          Se eliminarán {number(deleting.litros)} litros del {dateLabel(deleting.fecha)}.
+        </ConfirmModal>
+      )}
+    </>
+  );
+}
+function MeatProduction({ onAnimals }: { onAnimals: () => void }) {
+  const { data, farm, update, notify } = useFarm();
+  const animals = data.animals.filter(a => a.activo && animalMeat(a, farm));
+  const [animalId, setAnimalId] = useState(animals[0]?.id ?? ''),
+    [fecha, setFecha] = useState(today()),
+    [peso, setPeso] = useState(() => {
+      const last = animals[0] ? weightStats(animals[0], data.weightRecords).last : null;
+      return last ? String(last.pesoKg) : '';
+    }),
+    [notas, setNotas] = useState(''),
+    [error, setError] = useState(''),
+    [deleting, setDeleting] = useState<WeightRecord | null>(null);
+  const selected = animals.find(a => a.id === animalId) ?? animals[0];
+  const stats = selected ? weightStats(selected, data.weightRecords) : null;
+  const history = selected
+    ? data.weightRecords
+        .filter(r => r.animalId === selected.id)
+        .sort((a, b) => a.fecha.localeCompare(b.fecha))
+    : [];
+  function save(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    if (!selected) return;
+    const weight = Number(peso);
+    if (!Number.isFinite(weight) || weight <= 0) {
+      setError('Introduce un peso mayor que cero.');
+      return;
+    }
+    if (fecha < selected.fechaNacimiento) {
+      setError('La fecha no puede ser anterior al nacimiento.');
+      return;
+    }
+    if (data.weightRecords.some(r => r.animalId === selected.id && r.fecha === fecha)) {
+      setError(
+        'Ya hay una pesada de este animal en esa fecha. Elimina la incorrecta antes de sustituirla.'
+      );
+      return;
+    }
+    update(d => ({
+      ...d,
+      weightRecords: [
+        ...d.weightRecords,
+        { id: uid(), fecha, animalId: selected.id, pesoKg: weight, notas }
+      ]
+    }));
+    setNotas('');
+    notify('Pesada registrada.');
+  }
+  if (!animals.length)
+    return (
+      <Card>
+        <EmptyState
+          icon={Scale}
+          title="Registra el primer animal"
+          description="Necesitas un animal activo con orientación de carne para registrar sus pesadas y calcular la ganancia media diaria."
+          action={<Button onClick={onAnimals}>Ir al rebaño</Button>}
+        />
+      </Card>
+    );
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatTile
+          label="Peso actual estimado"
+          value={stats?.current == null ? 'Sin peso reciente' : number(stats.current) + ' kg'}
+          icon={Scale}
+        />
+        <StatTile
+          label="GMD entre últimas pesadas"
+          value={stats?.gmd == null ? 'Faltan dos pesadas' : number(stats.gmd, 3) + ' kg/día'}
+        />
+        <StatTile
+          label="Valor estimado por peso"
+          value={
+            stats?.current == null
+              ? 'Sin peso reciente'
+              : euro(stats.current * (farm.precioKgCarneEuro ?? 0))
+          }
+          help={euroRate(farm.precioKgCarneEuro ?? 0, 'kg en vivo')}
+        />
+      </div>
+      <div className="grid items-start gap-6 xl:grid-cols-2">
+        <Card className="space-y-4">
+          <h2 className="section-heading">Registrar pesada</h2>
+          <form onSubmit={save} className="space-y-4">
+            <Field label="Animal">
+              <Select
+                value={selected?.id ?? ''}
+                onChange={e => {
+                  setAnimalId(e.target.value);
+                  const animal = animals.find(a => a.id === e.target.value);
+                  const last = animal ? weightStats(animal, data.weightRecords).last : null;
+                  setPeso(last ? String(last.pesoKg) : '');
+                }}
+              >
+                {animals.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.crotal} · {a.raza}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="form-grid">
+              <Field label="Fecha de pesada">
+                <Input
+                  type="date"
+                  min={selected?.fechaNacimiento}
+                  max={today()}
+                  required
+                  value={fecha}
+                  onChange={e => setFecha(e.target.value)}
+                />
+              </Field>
+              <Field label="Peso vivo (kg)" error={error}>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  value={peso}
+                  required
+                  onChange={e => setPeso(e.target.value)}
+                />
+              </Field>
+            </div>
+            <Field label="Notas (opcional)">
+              <Textarea rows={2} value={notas} onChange={e => setNotas(e.target.value)} />
+            </Field>
+            <Button type="submit" className="w-full">
+              <Plus size={18} />
+              Guardar pesada
+            </Button>
+          </form>
+        </Card>
+        <div className="space-y-3">
+          <DataChart
+            title="Evolución del peso"
+            data={history.map(r => ({ label: dateLabel(r.fecha), value: r.pesoKg }))}
+            unit="kg"
+            line
+          />
+          <p className="text-xs text-stone-600">
+            El peso actual se estima prolongando la GMD de las dos últimas pesadas hasta hoy. Con
+            una sola pesada se muestra ese peso. No sustituye una nueva medición. Si han pasado más
+            de 30 días, no se calcula una estimación actual.
+            {stats?.last ? ' Última pesada: ' + dateLabel(stats.last.fecha) + '.' : ''}
+          </p>
+        </div>
+      </div>
+      <Card>
+        <h2 className="section-heading">Historial de pesadas · {selected?.crotal}</h2>
+        {!history.length ? (
+          <EmptyState
+            title="Todavía no hay pesadas"
+            description="La GMD se calculará al registrar dos pesadas en fechas distintas."
+          />
+        ) : (
+          <ul className="divide-y divide-stone-200">
+            {[...history].reverse().map(r => (
+              <li key={r.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="text-sm">
+                  <p>
+                    {dateLabel(r.fecha)} · <strong>{number(r.pesoKg)} kg</strong>
+                  </p>
+                  {r.notas && <p className="text-stone-600">{r.notas}</p>}
+                </div>
+                <Button
+                  variant="ghost"
+                  aria-label={'Eliminar pesada del ' + dateLabel(r.fecha)}
+                  onClick={() => setDeleting(r)}
+                >
+                  <Trash2 size={18} />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      {deleting && (
+        <ConfirmModal
+          title="Eliminar pesada"
+          onClose={() => setDeleting(null)}
+          onConfirm={() => {
+            update(d => ({
+              ...d,
+              weightRecords: d.weightRecords.filter(r => r.id !== deleting.id)
+            }));
+            setDeleting(null);
+            notify('Pesada eliminada.');
+          }}
+        >
+          Se eliminará la pesada del {dateLabel(deleting.fecha)}. La GMD se volverá a calcular.
+        </ConfirmModal>
+      )}
+    </>
+  );
+}

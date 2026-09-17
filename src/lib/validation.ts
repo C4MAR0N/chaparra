@@ -1,0 +1,236 @@
+import type {
+  Animal,
+  Backup,
+  FarmData,
+  FarmProfile,
+  HealthRecord,
+  InvoiceDoc,
+  MilkRecord,
+  SaleInvoiceTemplate,
+  WeightRecord
+} from '../types';
+import { CATEGORIAS, ESPECIES, ESTADOS, ORIENTACIONES, PROVINCIAS } from './constants';
+import { today } from './domain';
+export const object = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+const str = (v: unknown): v is string => typeof v === 'string' && v.length <= 20000;
+const nonempty = (v: unknown): v is string => str(v) && v.trim().length > 0;
+export const nonnegative = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1e12;
+const optional = (v: unknown, check: (v: unknown) => boolean) => v === undefined || check(v);
+const oneOf = (v: unknown, values: readonly unknown[]) => values.includes(v);
+const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every(str);
+export const validDate = (v: unknown): v is string =>
+  typeof v === 'string' &&
+  /^\d{4}-\d{2}-\d{2}$/.test(v) &&
+  !Number.isNaN(Date.parse(v)) &&
+  new Date(v).toISOString().slice(0, 10) === v;
+const pastDate = (v: unknown) => validDate(v) && v <= today();
+const image = (v: unknown) =>
+  typeof v === 'string' &&
+  v.length <= 3_000_000 &&
+  /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(v);
+const uniqueIds = (rows: { id: string }[]) => new Set(rows.map(r => r.id)).size === rows.length;
+export function isFarm(v: unknown): v is FarmProfile {
+  return (
+    object(v) &&
+    nonempty(v.nombreExplotacion) &&
+    str(v.titular) &&
+    optional(v.codigoRega, str) &&
+    optional(v.provincia, x => x === '' || oneOf(x, PROVINCIAS)) &&
+    Array.isArray(v.especies) &&
+    v.especies.length > 0 &&
+    new Set(v.especies).size === v.especies.length &&
+    v.especies.every(s => oneOf(s, ESPECIES)) &&
+    object(v.orientacionPorEspecie) &&
+    v.especies.every(
+      s =>
+        typeof s === 'string' &&
+        object(v.orientacionPorEspecie) &&
+        oneOf(v.orientacionPorEspecie[s], ORIENTACIONES)
+    ) &&
+    optional(v.ordenosPorDia, x => oneOf(x, [1, 2, 3])) &&
+    optional(v.precioLitroLecheEuro, nonnegative) &&
+    optional(v.precioKgCarneEuro, nonnegative) &&
+    v.moneda === 'EUR'
+  );
+}
+function isHealth(v: unknown): v is HealthRecord {
+  return (
+    object(v) &&
+    nonempty(v.id) &&
+    pastDate(v.fecha) &&
+    oneOf(v.estado, ESTADOS) &&
+    str(v.notas) &&
+    nonnegative(v.costeEuro)
+  );
+}
+export function isAnimal(v: unknown): v is Animal {
+  return (
+    object(v) &&
+    nonempty(v.id) &&
+    nonempty(v.crotal) &&
+    oneOf(v.especie, ESPECIES) &&
+    oneOf(v.orientacion, ORIENTACIONES) &&
+    str(v.ubicacion) &&
+    nonnegative(v.numeroPartos) &&
+    Number.isInteger(v.numeroPartos) &&
+    pastDate(v.fechaNacimiento) &&
+    strings(v.criasAsociadas) &&
+    oneOf(v.estadoSanitario, ESTADOS) &&
+    optional(v.notasSanitarias, str) &&
+    str(v.raza) &&
+    oneOf(v.sexo, ['Hembra', 'Macho']) &&
+    [
+      'produccionDiariaLitros',
+      'pesoKg',
+      'pesoCanalKg',
+      'precioEstimadoVentaEuro',
+      'costeAcumuladoEuro'
+    ].every(k => optional(v[k], nonnegative)) &&
+    optional(v.fotoUrl, image) &&
+    optional(v.fechaUltimoControl, pastDate) &&
+    typeof v.activo === 'boolean' &&
+    optional(v.motivoBaja, x => oneOf(x, ['Vendido', 'Muerto', 'Sacrificado', 'Otro'])) &&
+    pastDate(v.fechaAlta) &&
+    optional(v.fechaBaja, pastDate) &&
+    (v.activo || (!!v.fechaBaja && !!v.motivoBaja)) &&
+    Array.isArray(v.historialSanitario) &&
+    v.historialSanitario.every(isHealth) &&
+    uniqueIds(v.historialSanitario)
+  );
+}
+export function isMilk(v: unknown): v is MilkRecord {
+  return (
+    object(v) &&
+    nonempty(v.id) &&
+    pastDate(v.fecha) &&
+    optional(v.animalId, nonempty) &&
+    nonnegative(v.litros) &&
+    optional(v.ordeno, x => oneOf(x, [1, 2, 3])) &&
+    optional(v.notas, str)
+  );
+}
+export function isWeight(v: unknown): v is WeightRecord {
+  return (
+    object(v) &&
+    nonempty(v.id) &&
+    pastDate(v.fecha) &&
+    nonempty(v.animalId) &&
+    nonnegative(v.pesoKg) &&
+    v.pesoKg > 0 &&
+    optional(v.notas, str)
+  );
+}
+export function isSaleTemplate(v: unknown): v is SaleInvoiceTemplate {
+  return (
+    object(v) &&
+    [
+      'numeroFactura',
+      'nombreGanadero',
+      'nifCif',
+      'codigoRega',
+      'direccion',
+      'telefono',
+      'email',
+      'clienteNombre',
+      'clienteNif',
+      'clienteDireccion',
+      'lugarOperacion'
+    ].every(k => str(v[k])) &&
+    validDate(v.fechaEmision) &&
+    validDate(v.fechaOperacion) &&
+    oneOf(v.regimen, ['REAGP', 'General']) &&
+    ['ivaPorcentaje', 'irpfPorcentaje', 'compensacionPorcentaje'].every(
+      k => nonnegative(v[k]) && Number(v[k]) <= 100
+    ) &&
+    optional(v.logoUrl, image) &&
+    optional(v.notasPie, str) &&
+    Array.isArray(v.items) &&
+    v.items.every(
+      i =>
+        object(i) &&
+        nonempty(i.id) &&
+        str(i.descripcion) &&
+        nonnegative(i.cantidad) &&
+        nonnegative(i.precioUnitarioEuro) &&
+        nonnegative(i.subtotalEuro)
+    ) &&
+    new Set(v.items.map(i => (i as { id: string }).id)).size === v.items.length
+  );
+}
+export function isInvoice(v: unknown): v is InvoiceDoc {
+  return (
+    object(v) &&
+    nonempty(v.id) &&
+    oneOf(v.tipo, ['Compra / Gasto', 'Venta']) &&
+    nonempty(v.titulo) &&
+    validDate(v.fecha) &&
+    str(v.proveedorOCliente) &&
+    nonnegative(v.importeTotalEuro) &&
+    oneOf(v.categoria, CATEGORIAS) &&
+    optional(v.imagenUrl, image) &&
+    optional(v.notas, str) &&
+    optional(v.crotalesRelacionados, strings) &&
+    optional(v.documentoVenta, isSaleTemplate)
+  );
+}
+export const arrayOf = <T>(v: unknown, check: (row: unknown) => row is T): v is T[] =>
+  Array.isArray(v) && v.length <= 100000 && v.every(check);
+export function isFarmData(v: unknown): v is FarmData {
+  if (
+    !object(v) ||
+    !(v.farm === null || isFarm(v.farm)) ||
+    !arrayOf(v.animals, isAnimal) ||
+    !arrayOf(v.invoices, isInvoice) ||
+    !isSaleTemplate(v.saleTemplate) ||
+    !arrayOf(v.milkRecords, isMilk) ||
+    !arrayOf(v.weightRecords, isWeight)
+  )
+    return false;
+  const animals = v.animals;
+  const milk = v.milkRecords;
+  const ids = new Set(animals.map(a => a.id));
+  return (
+    [animals, v.invoices, v.milkRecords, v.weightRecords].every(uniqueIds) &&
+    new Set(animals.map(a => a.crotal.trim().toUpperCase())).size === animals.length &&
+    animals.every(a => a.criasAsociadas.every(id => id !== a.id && ids.has(id))) &&
+    v.weightRecords.every(r => ids.has(r.animalId)) &&
+    v.milkRecords.every(r => !r.animalId || ids.has(r.animalId)) &&
+    new Set(v.weightRecords.map(r => r.animalId + ':' + r.fecha)).size === v.weightRecords.length &&
+    new Set(v.milkRecords.map(r => [r.fecha, r.ordeno ?? 1, r.animalId ?? ''].join(':'))).size ===
+      v.milkRecords.length &&
+    milk.every(
+      r =>
+        !milk.some(
+          other =>
+            other.fecha === r.fecha &&
+            (other.ordeno ?? 1) === (r.ordeno ?? 1) &&
+            !!other.animalId !== !!r.animalId
+        )
+    )
+  );
+}
+export function parseBackup(value: unknown): Backup {
+  if (
+    !object(value) ||
+    value.format !== 'chaparra' ||
+    value.version !== 2 ||
+    !str(value.exportedAt) ||
+    !object(value.account) ||
+    !nonempty(value.account.nombre) ||
+    !str(value.account.email) ||
+    !isFarmData(value.data) ||
+    !value.data.farm
+  )
+    throw new Error(
+      'La copia no es válida: debe ser un JSON de Chaparra v2 con fechas, importes y relaciones coherentes. No se ha modificado ningún dato.'
+    );
+  return {
+    format: 'chaparra',
+    version: 2,
+    exportedAt: value.exportedAt,
+    account: { nombre: value.account.nombre, email: value.account.email },
+    data: value.data
+  };
+}

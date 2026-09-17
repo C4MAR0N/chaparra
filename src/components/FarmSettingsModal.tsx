@@ -1,177 +1,345 @@
-import React, { useState } from 'react';
-import { X, Settings, Save, Building2 } from 'lucide-react';
-import { FarmConfig, PropositoGanado, TipoGanado } from '../types';
-
-interface FarmSettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  config: FarmConfig;
-  onSave: (config: FarmConfig) => void;
-}
-
-export const FarmSettingsModal: React.FC<FarmSettingsModalProps> = ({
-  isOpen,
+import { useState, type FormEvent } from 'react';
+import { Download, LogOut, RefreshCw, Shield } from 'lucide-react';
+import type { Backup, FarmProfile, UserRecord } from '../types';
+import { useFarm } from '../context/FarmContext';
+import { hasMeat, hasMilk } from '../lib/domain';
+import { PROVINCIAS, especieLabel } from '../lib/constants';
+import { changePassword, updateUser } from '../services/auth';
+import { downloadBackup, readBackup } from '../services/backup';
+import { Banner, Button, Card, ConfirmModal, Field, Input, Modal, Select } from './ui';
+import { DeleteAccountModal } from './DeleteAccountModal';
+import { SecurityPrivacyModal } from './SecurityPrivacyModal';
+export function FarmSettingsModal({
   onClose,
-  config,
-  onSave
-}) => {
-  const [nombreExplotacion, setNombreExplotacion] = useState(config.nombreExplotacion);
-  const [codigoRega, setCodigoRega] = useState(config.codigoRega);
-  const [titular, setTitular] = useState(config.titular);
-  const [tipoGanadoPrincipal, setTipoGanadoPrincipal] = useState<TipoGanado>(config.tipoGanadoPrincipal);
-  const [propositoPrincipal, setPropositoPrincipal] = useState<PropositoGanado>(config.propositoPrincipal);
-  const [vecesOrdenoDia, setVecesOrdenoDia] = useState(config.vecesOrdenoDia);
-  const [precioPorLitroLecheEuro, setPrecioPorLitroLecheEuro] = useState(config.precioPorLitroLecheEuro);
-  const [precioEstimadoKgCarneEuro, setPrecioEstimadoKgCarneEuro] = useState(config.precioEstimadoKgCarneEuro);
-
-  if (!isOpen) return null;
-
-  const handleSubmit = (e: React.FormEvent) => {
+  onSurvey,
+  onLogout,
+  onUserChange
+}: {
+  onClose: () => void;
+  onSurvey: () => void;
+  onLogout: () => void;
+  onUserChange: (user: UserRecord) => void;
+}) {
+  const { user, data, farm, update, notify } = useFarm();
+  const [profile, setProfile] = useState(farm),
+    [nombre, setNombre] = useState(user.nombre),
+    [email, setEmail] = useState(user.email);
+  const [current, setCurrent] = useState(''),
+    [next, setNext] = useState(''),
+    [confirmation, setConfirmation] = useState(''),
+    [busy, setBusy] = useState(false),
+    [message, setMessage] = useState(''),
+    [error, setError] = useState('');
+  const [backup, setBackup] = useState<Backup | null>(null),
+    [deleting, setDeleting] = useState(false),
+    [privacy, setPrivacy] = useState(false);
+  const patch = (p: Partial<FarmProfile>) => setProfile({ ...profile, ...p });
+  function saveFarm(e: FormEvent) {
     e.preventDefault();
-    onSave({
-      nombreExplotacion: nombreExplotacion.trim() || 'Explotación Ganadera',
-      codigoRega: codigoRega.trim().toUpperCase() || 'ES000000000000',
-      titular: titular.trim() || 'Ganadero',
-      tipoGanadoPrincipal,
-      propositoPrincipal,
-      vecesOrdenoDia: Number(vecesOrdenoDia),
-      precioPorLitroLecheEuro: Number(precioPorLitroLecheEuro),
-      precioEstimadoKgCarneEuro: Number(precioEstimadoKgCarneEuro),
-      moneda: '€'
-    });
-    onClose();
-  };
-
+    update(d => ({
+      ...d,
+      farm: {
+        ...profile,
+        nombreExplotacion: profile.nombreExplotacion.trim(),
+        titular: profile.titular.trim()
+      }
+    }));
+    setMessage('Datos de la explotación guardados.');
+    setError('');
+  }
+  function saveAccount(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    try {
+      onUserChange(updateUser(user.id, { nombre, email }));
+      setMessage('Datos de la cuenta guardados.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se han podido guardar los datos.');
+    }
+  }
+  async function password(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    if (next !== confirmation) {
+      setError('Las contraseñas nuevas no coinciden.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await changePassword(user.id, current, next);
+      setCurrent('');
+      setNext('');
+      setConfirmation('');
+      setMessage('Contraseña actualizada.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se ha podido cambiar la contraseña.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function upload(file: File | undefined) {
+    if (!file) return;
+    setError('');
+    setBusy(true);
+    try {
+      setBackup(await readBackup(file));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se ha podido leer la copia.');
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <div className="modal-overlay">
-      <div className="modal-container p-6 space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <Settings size={20} className="text-emerald-700" />
-            Configuración de la Explotación Ganadera
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={20} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <div>
-            <label className="block font-semibold text-gray-700 mb-1">Nombre de la Ganadería / Finca</label>
-            <input
-              type="text"
-              value={nombreExplotacion}
-              onChange={(e) => setNombreExplotacion(e.target.value)}
-              className="input-farm font-bold text-emerald-950"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-gray-700 mb-1">Código REGA Oficial</label>
-              <input
-                type="text"
-                value={codigoRega}
-                onChange={(e) => setCodigoRega(e.target.value.toUpperCase())}
-                placeholder="ej. ES100480009123"
-                className="input-farm font-mono uppercase font-bold"
+    <Modal title="Ajustes y cuenta" onClose={onClose} wide>
+      <Card className="space-y-4 border-brand-200 bg-brand-50">
+        <h3 className="section-heading">Copia de seguridad</h3>
+        <p className="text-sm leading-relaxed text-stone-600">
+          No hay copia en la nube. Exporta toda tu explotación, fotos e historiales a JSON y guarda
+          el archivo en un lugar seguro. La copia no incluye contraseñas; al importar mantendrás el
+          acceso de esta cuenta.
+        </p>
+        <Button
+          onClick={() => {
+            downloadBackup(user, data);
+            setMessage('Copia preparada. Comprueba la carpeta de descargas.');
+          }}
+        >
+          <Download size={18} />
+          Exportar copia de seguridad
+        </Button>
+        <Field
+          label="Importar una copia JSON"
+          help="Solo copias de Chaparra v2. Verás un resumen antes de sustituir los datos."
+        >
+          <Input
+            type="file"
+            accept=".json,application/json"
+            disabled={busy}
+            onChange={e => {
+              void upload(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+        </Field>
+      </Card>
+      {error && <Banner tone="error">{error}</Banner>}
+      {message && <Banner tone="success">{message}</Banner>}
+      {busy && (
+        <p className="text-sm" role="status">
+          Procesando…
+        </p>
+      )}
+      <section className="space-y-4">
+        <h3 className="section-heading">Tu explotación</h3>
+        <p className="text-sm text-stone-600">
+          {farm.especies
+            .map(s => especieLabel(s) + ' · ' + farm.orientacionPorEspecie[s])
+            .join(' / ')}
+        </p>
+        <form onSubmit={saveFarm} className="space-y-4">
+          <div className="form-grid">
+            <Field label="Nombre de la ganadería">
+              <Input
+                value={profile.nombreExplotacion}
+                onChange={e => patch({ nombreExplotacion: e.target.value })}
                 required
+                pattern=".*\S.*"
               />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-gray-700 mb-1">Nombre del Titular</label>
-              <input
-                type="text"
-                value={titular}
-                onChange={(e) => setTitular(e.target.value)}
-                className="input-farm"
-                required
+            </Field>
+            <Field label="Titular">
+              <Input value={profile.titular} onChange={e => patch({ titular: e.target.value })} />
+            </Field>
+            <Field label="Código REGA">
+              <Input
+                value={profile.codigoRega ?? ''}
+                onChange={e => patch({ codigoRega: e.target.value.toUpperCase() })}
               />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-gray-700 mb-1">Especie Principal</label>
-              <select
-                value={tipoGanadoPrincipal}
-                onChange={(e) => setTipoGanadoPrincipal(e.target.value as TipoGanado)}
-                className="input-farm font-medium"
+            </Field>
+            <Field label="Provincia">
+              <Select
+                value={profile.provincia ?? ''}
+                onChange={e => patch({ provincia: e.target.value })}
               >
-                <option value="Vacuno">Vacuno / Bovino</option>
-                <option value="Ovino">Ovino / Ovejas</option>
-                <option value="Caprino">Caprino / Cabras</option>
-                <option value="Porcino">Porcino / Cerdos</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-gray-700 mb-1">Aprovechamiento</label>
-              <select
-                value={propositoPrincipal}
-                onChange={(e) => setPropositoPrincipal(e.target.value as PropositoGanado)}
-                className="input-farm font-bold text-emerald-900"
-              >
-                <option value="Mixto">Mixto (Carne y Ordeño)</option>
-                <option value="Ordeño">Ordeño / Leche</option>
-                <option value="Carne">Carne</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-100 space-y-3">
-            <h3 className="font-bold text-emerald-950 text-xs">Ajustes Productivos y Precios (€)</h3>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="block font-semibold text-blue-900 mb-1">Ordeños / Día</label>
-                <select
-                  value={vecesOrdenoDia}
-                  onChange={(e) => setVecesOrdenoDia(Number(e.target.value))}
-                  className="input-farm bg-white font-bold"
-                >
-                  <option value={1}>1 vez / día</option>
-                  <option value={2}>2 veces / día</option>
-                  <option value={3}>3 veces / día</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-blue-900 mb-1">Precio Leche (€/L)</label>
-                <input
+                <option value="">Sin indicar</option>
+                {PROVINCIAS.map(p => (
+                  <option key={p}>{p}</option>
+                ))}
+              </Select>
+            </Field>
+            {hasMilk(profile) && (
+              <>
+                <Field label="Ordeños al día">
+                  <Select
+                    value={profile.ordenosPorDia ?? 2}
+                    onChange={e => patch({ ordenosPorDia: Number(e.target.value) as 1 | 2 | 3 })}
+                  >
+                    {[1, 2, 3].map(n => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Precio estimado de leche (€/litro)">
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    required
+                    value={profile.precioLitroLecheEuro ?? 0}
+                    onChange={e => patch({ precioLitroLecheEuro: Number(e.target.value) })}
+                  />
+                </Field>
+              </>
+            )}
+            {hasMeat(profile) && (
+              <Field label="Precio estimado de carne (€/kg en vivo)">
+                <Input
                   type="number"
+                  inputMode="decimal"
+                  min="0"
                   step="0.01"
-                  value={precioPorLitroLecheEuro}
-                  onChange={(e) => setPrecioPorLitroLecheEuro(Number(e.target.value))}
-                  className="input-farm bg-white font-bold text-emerald-900"
+                  required
+                  value={profile.precioKgCarneEuro ?? 0}
+                  onChange={e => patch({ precioKgCarneEuro: Number(e.target.value) })}
                 />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-amber-900 mb-1">Precio Carne (€/kg)</label>
-                <input
-                  type="number"
-                  step="0.10"
-                  value={precioEstimadoKgCarneEuro}
-                  onChange={(e) => setPrecioEstimadoKgCarneEuro(Number(e.target.value))}
-                  className="input-farm bg-white font-bold text-emerald-900"
-                />
-              </div>
-            </div>
+              </Field>
+            )}
           </div>
-
-          <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
-            <button type="button" onClick={onClose} className="btn-farm-secondary text-xs">
-              Cancelar
-            </button>
-            <button type="submit" className="btn-farm-primary text-xs">
-              <Save size={16} /> Guardar Ajustes
-            </button>
+          <div className="flex flex-wrap gap-3">
+            <Button type="submit">Guardar explotación</Button>
+            <Button variant="secondary" onClick={onSurvey}>
+              <RefreshCw size={18} />
+              Rehacer encuesta
+            </Button>
           </div>
         </form>
+      </section>
+      <section className="space-y-4 border-t border-stone-200 pt-5">
+        <h3 className="section-heading">Datos de la cuenta</h3>
+        <form onSubmit={saveAccount} className="space-y-4">
+          <div className="form-grid">
+            <Field label="Nombre y apellidos">
+              <Input
+                autoComplete="name"
+                value={nombre}
+                onChange={e => setNombre(e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Correo electrónico">
+              <Input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+            </Field>
+          </div>
+          <Button variant="secondary" type="submit">
+            Guardar cuenta
+          </Button>
+        </form>
+      </section>
+      <section className="space-y-4 border-t border-stone-200 pt-5">
+        <h3 className="section-heading">Cambiar contraseña</h3>
+        <form onSubmit={password} className="space-y-4">
+          <Field label="Contraseña actual">
+            <Input
+              type="password"
+              autoComplete="current-password"
+              value={current}
+              onChange={e => setCurrent(e.target.value)}
+              required
+            />
+          </Field>
+          <div className="form-grid">
+            <Field label="Nueva contraseña" help="Al menos 8 caracteres.">
+              <Input
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                value={next}
+                onChange={e => setNext(e.target.value)}
+                required
+              />
+            </Field>
+            <Field
+              label="Repetir nueva contraseña"
+              error={
+                confirmation && confirmation !== next ? 'Las contraseñas no coinciden.' : undefined
+              }
+            >
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={confirmation}
+                onChange={e => setConfirmation(e.target.value)}
+                required
+              />
+            </Field>
+          </div>
+          <Button
+            variant="secondary"
+            type="submit"
+            loading={busy}
+            disabled={next.length < 8 || next !== confirmation || !current}
+          >
+            Cambiar contraseña
+          </Button>
+        </form>
+      </section>
+      <div className="flex flex-wrap gap-3 border-t border-stone-200 pt-5">
+        <Button variant="secondary" onClick={() => setPrivacy(true)}>
+          <Shield size={18} />
+          Privacidad
+        </Button>
+        <Button variant="secondary" onClick={onLogout}>
+          <LogOut size={18} />
+          Cerrar sesión
+        </Button>
+        <Button variant="ghost" className="text-red-800" onClick={() => setDeleting(true)}>
+          Eliminar mi cuenta
+        </Button>
       </div>
-    </div>
+      {backup && (
+        <ConfirmModal
+          title="Sustituir los datos de esta cuenta"
+          danger={false}
+          confirmLabel="Importar y sustituir"
+          onClose={() => setBackup(null)}
+          onConfirm={() => {
+            update(() => backup.data);
+            setProfile(backup.data.farm!);
+            setBackup(null);
+            notify('Copia importada. Se ha conservado tu cuenta de acceso.');
+            onClose();
+          }}
+        >
+          <p className="mb-3 font-semibold">{backup.data.farm?.nombreExplotacion}</p>
+          <p>
+            {backup.data.animals.length} animales · {backup.data.invoices.length} facturas ·{' '}
+            {backup.data.milkRecords.length + backup.data.weightRecords.length} registros de
+            producción.
+          </p>
+          <p className="mt-3">
+            Esta copia sustituirá todos los datos de explotación de {user.email}. Las otras cuentas
+            no se modificarán. Exporta primero tus datos actuales si quieres conservarlos.
+          </p>
+        </ConfirmModal>
+      )}
+      {privacy && <SecurityPrivacyModal onClose={() => setPrivacy(false)} />}
+      {deleting && (
+        <DeleteAccountModal
+          email={user.email}
+          onClose={() => setDeleting(false)}
+          onDeleted={onLogout}
+        />
+      )}
+    </Modal>
   );
-};
+}

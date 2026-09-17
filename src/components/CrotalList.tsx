@@ -1,12 +1,25 @@
-import { useMemo, useState } from 'react';
-import { ChevronRight, HeartPulse, MapPin, Plus, Search, Tag } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, HeartPulse, MapPin, Plus, Search, Tag } from 'lucide-react';
 import type { Animal } from '../types';
 import { useFarm } from '../context/FarmContext';
 import { ESPECIES, ESTADOS, especieLabel } from '../lib/constants';
-import { age, herdLabel } from '../lib/domain';
+import {
+  age,
+  edadTexto,
+  herdLabel,
+  necesitaAtencion,
+  porUbicacion,
+  ubicacionDe
+} from '../lib/domain';
 import { Badge, Button, Card, EmptyState, Field, Input, Select, StatTile } from './ui';
 import { AnimalFormModal } from './AnimalFormModal';
 import { AnimalDetailModal } from './AnimalDetailModal';
+
+/* Sin filtros la lista se queda corta a propósito: de 235 animales, los cinco
+ * primeros ya dicen que la explotación está ahí, y el resto se despliega cuando
+ * de verdad se busca algo. */
+const VISIBLES_SIN_FILTRO = 5;
+
 export function CrotalList() {
   const { data, farm } = useFarm();
   const animals = data.animals;
@@ -14,11 +27,20 @@ export function CrotalList() {
     [species, setSpecies] = useState(''),
     [health, setHealth] = useState(''),
     [sex, setSex] = useState(''),
+    [ubicacion, setUbicacion] = useState(''),
     [active, setActive] = useState('active'),
     [sort, setSort] = useState('crotal');
   const [selectedId, setSelectedId] = useState<string | null>(null),
-    [editing, setEditing] = useState<Animal | 'new' | null>(null);
+    [editing, setEditing] = useState<Animal | 'new' | null>(null),
+    [verManadas, setVerManadas] = useState(false),
+    [verTodos, setVerTodos] = useState(false);
   const selected = animals.find(a => a.id === selectedId);
+  const lista = useRef<HTMLDivElement>(null);
+  const manadas = useMemo(() => porUbicacion(animals), [animals]);
+  const ubicaciones = useMemo(
+    () => [...new Set(animals.map(ubicacionDe))].sort((a, b) => a.localeCompare(b, 'es')),
+    [animals]
+  );
   const filtered = useMemo(
     () =>
       animals
@@ -29,8 +51,10 @@ export function CrotalList() {
                 s.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es'))
               )) &&
             (!species || a.especie === species) &&
-            (!health || a.estadoSanitario === health) &&
+            (!health ||
+              (health === 'atencion' ? necesitaAtencion(a) : a.estadoSanitario === health)) &&
             (!sex || a.sexo === sex) &&
+            (!ubicacion || ubicacionDe(a) === ubicacion) &&
             (active === 'all' || a.activo === (active === 'active'))
         )
         .sort((a, b) =>
@@ -40,15 +64,37 @@ export function CrotalList() {
               ? (b.fechaUltimoControl ?? '').localeCompare(a.fechaUltimoControl ?? '')
               : a.crotal.localeCompare(b.crotal, 'es', { numeric: true })
         ),
-    [animals, search, species, health, sex, active, sort]
+    [animals, search, species, health, sex, ubicacion, active, sort]
   );
+  const hayFiltros =
+    Boolean(search || species || health || sex || ubicacion) || active !== 'active';
+  const visibles = hayFiltros || verTodos ? filtered : filtered.slice(0, VISIBLES_SIN_FILTRO);
+  const ocultos = filtered.length - visibles.length;
   const reset = () => {
     setSearch('');
     setSpecies('');
     setHealth('');
     setSex('');
+    setUbicacion('');
     setActive('active');
+    setVerTodos(false);
   };
+  /* Llevar la vista al listado: un filtro que cambia una lista que no se ve es
+   * un clic que parece no haber hecho nada. */
+  const irAlListado = () =>
+    requestAnimationFrame(() => lista.current?.scrollIntoView({ behavior: 'smooth' }));
+  function verAtencion() {
+    if (health === 'atencion') return setHealth('');
+    reset();
+    setHealth('atencion');
+    irAlListado();
+  }
+  function verManada(nombre: string) {
+    reset();
+    setUbicacion(nombre);
+    setVerManadas(false);
+    irAlListado();
+  }
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -71,28 +117,54 @@ export function CrotalList() {
         />
         <StatTile
           label="Necesitan atención"
-          value={
-            animals.filter(
-              a =>
-                a.activo &&
-                ['En tratamiento', 'En cuarentena', 'Observación'].includes(a.estadoSanitario)
-            ).length
-          }
+          value={animals.filter(necesitaAtencion).length}
           icon={HeartPulse}
+          onClick={animals.some(necesitaAtencion) ? verAtencion : undefined}
+          expanded={health === 'atencion'}
         />
         <StatTile
           label="Ubicaciones"
-          value={
-            new Set(
-              animals
-                .filter(a => a.activo)
-                .map(a => a.ubicacion)
-                .filter(Boolean)
-            ).size
-          }
+          value={manadas.length}
           icon={MapPin}
+          onClick={manadas.length ? () => setVerManadas(v => !v) : undefined}
+          expanded={verManadas}
         />
       </div>
+      {verManadas && (
+        <Card className="space-y-3">
+          <div>
+            <h2 className="section-heading">Reparto por ubicación</h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Solo animales activos. Toca una manada para ver sus crotales.
+            </p>
+          </div>
+          <ul className="divide-y divide-stone-200">
+            {manadas.map(m => (
+              <li key={m.ubicacion}>
+                <button
+                  type="button"
+                  onClick={() => verManada(m.ubicacion)}
+                  className="flex w-full min-h-12 items-center gap-3 rounded-xl px-2 py-3 text-left hover:bg-brand-50"
+                >
+                  <MapPin size={18} className="shrink-0 text-brand-700" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{m.ubicacion}</p>
+                    <p className="mt-1 text-sm text-stone-600">
+                      {m.hembras} {m.hembras === 1 ? 'hembra' : 'hembras'} · {m.machos}{' '}
+                      {m.machos === 1 ? 'macho' : 'machos'} · edad media {edadTexto(m.mesesMedios)}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-right">
+                    <span className="text-xl font-bold tabular-nums text-brand-900">{m.total}</span>
+                    <span className="block text-xs text-stone-600">animales</span>
+                  </p>
+                  <ChevronRight size={20} className="shrink-0 text-stone-500" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       {animals.length === 0 ? (
         <Card>
           <EmptyState
@@ -118,7 +190,17 @@ export function CrotalList() {
                 placeholder="Escribe un crotal, una raza o un cercado"
               />
             </Field>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+              <Field label="Ubicación">
+                <Select value={ubicacion} onChange={e => setUbicacion(e.target.value)}>
+                  <option value="">Todas</option>
+                  {ubicaciones.map(u => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <Field label="Especie">
                 <Select value={species} onChange={e => setSpecies(e.target.value)}>
                   <option value="">Todas</option>
@@ -134,6 +216,7 @@ export function CrotalList() {
               <Field label="Sanidad">
                 <Select value={health} onChange={e => setHealth(e.target.value)}>
                   <option value="">Todos los estados</option>
+                  <option value="atencion">Necesitan atención</option>
                   {ESTADOS.map(s => (
                     <option key={s}>{s}</option>
                   ))}
@@ -162,10 +245,11 @@ export function CrotalList() {
               </Field>
             </div>
           </Card>
-          <div className="flex items-center justify-between gap-3">
+          <div ref={lista} className="flex items-center justify-between gap-3 scroll-mt-4">
             <p className="text-sm font-semibold text-stone-600">
               {filtered.length}{' '}
               {filtered.length === 1 ? 'animal encontrado' : 'animales encontrados'}
+              {ubicacion && ` en ${ubicacion}`}
             </p>
             <Button variant="ghost" size="sm" onClick={reset}>
               Restablecer filtros
@@ -187,7 +271,7 @@ export function CrotalList() {
           ) : (
             <>
               <div className="space-y-3 md:hidden">
-                {filtered.map(a => (
+                {visibles.map(a => (
                   <button
                     key={a.id}
                     onClick={() => setSelectedId(a.id)}
@@ -228,7 +312,7 @@ export function CrotalList() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map(a => (
+                    {visibles.map(a => (
                       <tr key={a.id} className="hover:bg-brand-50">
                         <td>
                           <Button
@@ -256,6 +340,17 @@ export function CrotalList() {
                   </tbody>
                 </table>
               </Card>
+              {ocultos > 0 && (
+                <Button variant="secondary" className="w-full" onClick={() => setVerTodos(true)}>
+                  <ChevronDown size={18} />
+                  Ver los {ocultos} animales restantes
+                </Button>
+              )}
+              {verTodos && !hayFiltros && filtered.length > VISIBLES_SIN_FILTRO && (
+                <Button variant="ghost" className="w-full" onClick={() => setVerTodos(false)}>
+                  Ver solo los primeros {VISIBLES_SIN_FILTRO}
+                </Button>
+              )}
             </>
           )}
         </>

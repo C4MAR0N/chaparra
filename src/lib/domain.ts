@@ -1,4 +1,5 @@
 import type { Animal, FarmProfile, MilkRecord, SaleInvoiceTemplate, WeightRecord } from '../types';
+import { ESTADOS_ATENCION } from './constants';
 export const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -22,16 +23,22 @@ export const animalMilk = (a: Animal, f: FarmProfile) => hasMilk(f) && a.orienta
 export const animalMeat = (a: Animal, f: FarmProfile) => hasMeat(f) && a.orientacion !== 'Leche';
 export const herdLabel = (f: FarmProfile) =>
   f.especies.some(s => s === 'Ovino' || s === 'Caprino') ? 'rebaño' : 'ganado';
-export function age(birth: string, reference = today()) {
+/** Edad en meses cumplidos, o null si el animal no tiene una fecha válida. */
+export function mesesDeEdad(birth: string, reference = today()): number | null {
   const b = new Date(birth + 'T12:00:00'),
     n = new Date(reference + 'T12:00:00');
+  if (Number.isNaN(b.getTime()) || Number.isNaN(n.getTime())) return null;
   let months = (n.getFullYear() - b.getFullYear()) * 12 + n.getMonth() - b.getMonth();
   if (n.getDate() < b.getDate()) months--;
-  months = Math.max(0, months);
+  return Math.max(0, months);
+}
+export function edadTexto(months: number | null) {
+  if (months === null) return 'Sin fecha';
   const years = Math.floor(months / 12),
-    rest = months % 12;
+    rest = Math.round(months % 12);
   return `${years} ${years === 1 ? 'año' : 'años'} y ${rest} ${rest === 1 ? 'mes' : 'meses'}`;
 }
+export const age = (birth: string, reference = today()) => edadTexto(mesesDeEdad(birth, reference));
 export const daysBetween = (from: string, to: string) =>
   Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000);
 export function milkSeries(records: MilkRecord[], days: number, end = today()) {
@@ -101,3 +108,108 @@ export function aplicarMadre(animals: Animal[], cria: string, madre: string): An
 /** Devuelve la madre de un animal, si alguna lo tiene entre sus crías. */
 export const madreDe = (animals: Animal[], cria: string) =>
   animals.find(a => a.criasAsociadas.includes(cria));
+
+/*
+ * La manada se organiza por ubicación: es lo primero que mira un ganadero al
+ * salir al campo, porque determina a qué cercado tiene que ir. Un animal sin
+ * ubicación no se esconde en un hueco: se agrupa bajo una etiqueta visible.
+ */
+export const SIN_UBICACION = 'Sin ubicación';
+export const ubicacionDe = (a: Animal) => a.ubicacion.trim() || SIN_UBICACION;
+
+export interface ResumenUbicacion {
+  ubicacion: string;
+  total: number;
+  hembras: number;
+  machos: number;
+  /** Edad media en meses; null si ningún animal del grupo tiene fecha válida. */
+  mesesMedios: number | null;
+}
+
+/** Reparto del ganado activo por ubicación, de la manada más grande a la menor. */
+export function porUbicacion(animals: Animal[], reference = today()): ResumenUbicacion[] {
+  const grupos = new Map<string, Animal[]>();
+  for (const a of animals) {
+    if (!a.activo) continue;
+    const clave = ubicacionDe(a);
+    const lista = grupos.get(clave);
+    if (lista) lista.push(a);
+    else grupos.set(clave, [a]);
+  }
+  return [...grupos.entries()]
+    .map(([ubicacion, lista]) => {
+      const edades = lista
+        .map(a => mesesDeEdad(a.fechaNacimiento, reference))
+        .filter((m): m is number => m !== null);
+      return {
+        ubicacion,
+        total: lista.length,
+        hembras: lista.filter(a => a.sexo === 'Hembra').length,
+        machos: lista.filter(a => a.sexo === 'Macho').length,
+        mesesMedios: edades.length ? edades.reduce((s, m) => s + m, 0) / edades.length : null
+      };
+    })
+    .sort((a, b) => b.total - a.total || a.ubicacion.localeCompare(b.ubicacion, 'es'));
+}
+
+/* Alias en vez de interfaz para que la fila encaje directamente en la gráfica,
+ * que espera un registro de valores sueltos. */
+export type AltasMes = {
+  /** Mes en formato AAAA-MM, para ordenar y buscar. */
+  mes: string;
+  label: string;
+  hembras: number;
+  machos: number;
+  total: number;
+};
+
+const mesDe = (fecha: string) => fecha.slice(0, 7);
+const sumarMes = (mes: string, meses: number) => {
+  const d = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)) - 1 + meses, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/*
+ * Historial de altas mes a mes. Se separa por sexo porque la pregunta real del
+ * ganadero no es «cuántos animales entraron» sino «cuántas hembras de reposición
+ * estoy metiendo». Los meses sin ninguna alta se incluyen con cero: un hueco en
+ * la serie es información, no un dato que falte.
+ */
+export function altasPorMes(
+  animals: Animal[],
+  desde: string,
+  hasta: string,
+  campo: 'fechaAlta' | 'fechaNacimiento' = 'fechaAlta'
+): AltasMes[] {
+  if (!desde || !hasta || hasta < desde) return [];
+  const primero = mesDe(desde),
+    ultimo = mesDe(hasta);
+  const meses: AltasMes[] = [];
+  // El tope evita que una fecha disparatada tecleada a mano cuelgue la pantalla.
+  for (let mes = primero; mes <= ultimo && meses.length < 600; mes = sumarMes(mes, 1)) {
+    meses.push({
+      mes,
+      label: new Date(mes + '-01T12:00:00').toLocaleDateString('es-ES', {
+        month: 'short',
+        year: '2-digit'
+      }),
+      hembras: 0,
+      machos: 0,
+      total: 0
+    });
+  }
+  const indice = new Map(meses.map((m, i) => [m.mes, i]));
+  for (const a of animals) {
+    const fecha = campo === 'fechaAlta' ? a.fechaAlta : a.fechaNacimiento;
+    const i = indice.get(mesDe(fecha ?? ''));
+    if (i === undefined) continue;
+    meses[i].total++;
+    if (a.sexo === 'Hembra') meses[i].hembras++;
+    else meses[i].machos++;
+  }
+  return meses;
+}
+
+/** Estados en los que el animal pide una visita, no solo una anotación. */
+export const necesitaAtencion = (a: Animal) =>
+  a.activo && ESTADOS_ATENCION.includes(a.estadoSanitario);

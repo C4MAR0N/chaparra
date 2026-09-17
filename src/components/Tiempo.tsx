@@ -159,11 +159,9 @@ export function Tiempo() {
               </>
             ) : (
               <>
-                Datos de <strong>Open-Meteo</strong> (modelo ECMWF). La previsión oficial de{' '}
-                <strong>AEMET</strong> se mostrará en cuanto esté configurada su clave de acceso.
+                Datos de <strong>Open-Meteo</strong> (modelo ECMWF).
               </>
-            )}{' '}
-            Una previsión es una estimación, no una certeza.
+            )}
           </p>
         </>
       )}

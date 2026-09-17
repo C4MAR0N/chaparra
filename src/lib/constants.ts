@@ -16,6 +16,15 @@ export const ESTADOS: EstadoSanitario[] = [
   'Vacunado',
   'Observación'
 ];
+/*
+ * Los tres estados que significan «este animal necesita que vayas a verlo».
+ * Vacunado y Sano son anotaciones del historial, no avisos.
+ */
+export const ESTADOS_ATENCION: EstadoSanitario[] = [
+  'En tratamiento',
+  'En cuarentena',
+  'Observación'
+];
 export const CATEGORIAS: InvoiceCategory[] = [
   'Pienso/Alimentación',
   'Veterinario/Sanidad',

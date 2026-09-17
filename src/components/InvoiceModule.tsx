@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import { FileText, Image as ImageIcon, Plus, Trash2 } from 'lucide-react';
+import { ExternalLink, FileText, Paperclip, Plus, Trash2 } from 'lucide-react';
 import type { InvoiceCategory, InvoiceDoc, SaleInvoiceTemplate } from '../types';
 import { useFarm } from '../context/FarmContext';
 import { CATEGORIAS } from '../lib/constants';
 import { dateLabel, euro, hasMilk, today, uid } from '../lib/domain';
-import { compressImage } from '../services/images';
+import { abrirAdjunto, esPdf, prepararAdjunto } from '../services/images';
 import {
   Badge,
   Banner,
@@ -157,8 +157,8 @@ export function InvoiceModule() {
                     <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-stone-100 pt-3">
                       {i.imagenUrl && (
                         <Button variant="secondary" onClick={() => setImage(i.imagenUrl ?? null)}>
-                          <ImageIcon size={18} />
-                          Ver foto
+                          <Paperclip size={18} />
+                          Ver justificante
                         </Button>
                       )}
                       {i.documentoVenta && (
@@ -187,12 +187,32 @@ export function InvoiceModule() {
       )}
       {adding && <InvoiceForm onClose={() => setAdding(false)} />}
       {image && (
-        <Modal title="Foto del justificante" onClose={() => setImage(null)} wide>
-          <img
-            src={image}
-            alt="Justificante adjunto"
-            className="max-h-[70vh] w-full object-contain"
-          />
+        <Modal
+          title={esPdf(image) ? 'Justificante en PDF' : 'Foto del justificante'}
+          onClose={() => setImage(null)}
+          wide
+        >
+          {esPdf(image) ? (
+            <div className="space-y-3">
+              {/* Muchos navegadores de móvil no dibujan un PDF incrustado, así que
+                  el enlace para abrirlo aparte no es un extra: es la salida. */}
+              <iframe
+                src={image}
+                title="Justificante en PDF"
+                className="h-[70vh] w-full rounded-xl border border-stone-200"
+              />
+              <Button variant="secondary" onClick={() => abrirAdjunto(image)}>
+                <ExternalLink size={18} />
+                Abrir en otra pestaña
+              </Button>
+            </div>
+          ) : (
+            <img
+              src={image}
+              alt="Justificante adjunto"
+              className="max-h-[70vh] w-full object-contain"
+            />
+          )}
         </Modal>
       )}
       {document && <SavedInvoiceModal template={document} onClose={() => setDocument(null)} />}
@@ -206,8 +226,8 @@ export function InvoiceModule() {
             notify('Registro eliminado.');
           }}
         >
-          Se eliminará «{deleting.titulo}», por {euro(deleting.importeTotalEuro)}, y su foto
-          adjunta.
+          Se eliminará «{deleting.titulo}», por {euro(deleting.importeTotalEuro)}, y el justificante
+          adjunto.
         </ConfirmModal>
       )}
     </div>
@@ -231,9 +251,9 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError('');
     try {
-      setImage(await compressImage(file));
+      setImage(await prepararAdjunto(file));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se ha podido cargar la imagen.');
+      setError(e instanceof Error ? e.message : 'No se ha podido cargar el justificante.');
     } finally {
       setBusy(false);
     }
@@ -301,12 +321,12 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
           <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
         </Field>
         <Field
-          label="Adjuntar foto del justificante"
-          help="JPEG, PNG o WebP de hasta 2 MB. Se reduce a 1280 px y se comprime antes de guardar."
+          label="Adjuntar justificante"
+          help="Foto (JPEG, PNG o WebP) o PDF, hasta 2 MB. Las fotos se reducen a 1280 px; el PDF se guarda tal cual."
         >
           <Input
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
             onChange={e => {
               void upload(e.target.files?.[0]);
               e.target.value = '';
@@ -326,19 +346,35 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
         </Field>
         {image && (
           <div className="space-y-2">
-            <img
-              src={image}
-              alt="Foto que se adjuntará al registro"
-              className="h-40 w-full rounded-xl border border-stone-200 object-contain"
-            />
+            {esPdf(image) ? (
+              <div className="flex items-center gap-3 rounded-xl border border-stone-200 p-4">
+                <FileText size={24} className="shrink-0 text-brand-700" aria-hidden="true" />
+                <p className="min-w-0 flex-1 text-sm">
+                  PDF listo para adjuntar
+                  <span className="block text-xs text-stone-600">
+                    Se guardará junto al registro.
+                  </span>
+                </p>
+                <Button variant="ghost" size="sm" onClick={() => abrirAdjunto(image)}>
+                  <ExternalLink size={16} />
+                  Ver
+                </Button>
+              </div>
+            ) : (
+              <img
+                src={image}
+                alt="Justificante que se adjuntará al registro"
+                className="h-40 w-full rounded-xl border border-stone-200 object-contain"
+              />
+            )}
             <Button variant="ghost" onClick={() => setImage(undefined)}>
-              Quitar foto
+              Quitar justificante
             </Button>
           </div>
         )}
         {busy && (
           <p role="status" className="text-sm">
-            Preparando imagen…
+            Preparando el justificante…
           </p>
         )}
         {error && <Banner tone="error">{error}</Banner>}

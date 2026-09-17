@@ -30,6 +30,14 @@ const image = (v: unknown) =>
   typeof v === 'string' &&
   v.length <= 3_000_000 &&
   /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(v);
+/* El justificante de una factura llega tal como lo manda el proveedor: foto del
+ * albarán o el PDF que viene por correo. El tope en caracteres deja pasar un PDF
+ * de 2 MB, que es el que acepta el formulario. */
+const justificante = (v: unknown) =>
+  image(v) ||
+  (typeof v === 'string' &&
+    v.length <= 3_000_000 &&
+    /^data:application\/pdf;base64,[A-Za-z0-9+/]+=*$/.test(v));
 const uniqueIds = (rows: { id: string }[]) => new Set(rows.map(r => r.id)).size === rows.length;
 export function isFarm(v: unknown): v is FarmProfile {
   return (
@@ -181,7 +189,7 @@ export function isInvoice(v: unknown): v is InvoiceDoc {
     str(v.proveedorOCliente) &&
     nonnegative(v.importeTotalEuro) &&
     oneOf(v.categoria, CATEGORIAS) &&
-    optional(v.imagenUrl, image) &&
+    optional(v.imagenUrl, justificante) &&
     optional(v.notas, str) &&
     optional(v.crotalesRelacionados, strings) &&
     optional(v.documentoVenta, isSaleTemplate)

@@ -12,7 +12,14 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes
 } from 'react';
-import { AlertCircle, CheckCircle2, Inbox, Loader2, type LucideIcon } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  Inbox,
+  Loader2,
+  type LucideIcon
+} from 'lucide-react';
 export { Modal, ConfirmModal } from './Modal';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -192,23 +199,51 @@ export function StatTile({
   label,
   value,
   help,
-  icon: Icon
+  icon: Icon,
+  onClick,
+  expanded
 }: {
   label: string;
   value: ReactNode;
   help?: string;
   icon?: LucideIcon;
+  /** Si se indica, el dato deja de ser un rótulo y pasa a ser una puerta. */
+  onClick?: () => void;
+  expanded?: boolean;
 }) {
-  return (
-    <Card className="!p-3 sm:!p-5">
+  const contenido = (
+    <>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-stone-600">{label}</p>
+        <p className="text-xs font-medium text-stone-600 sm:text-sm">{label}</p>
         {Icon && (
           <Icon size={20} className="hidden shrink-0 text-brand-700 sm:block" aria-hidden="true" />
         )}
       </div>
       <p className="mt-3 break-words text-2xl font-bold tracking-tight text-brand-900">{value}</p>
       {help && <p className="mt-1 text-xs text-stone-600">{help}</p>}
+    </>
+  );
+  if (!onClick) return <Card className="!p-3 sm:!p-5">{contenido}</Card>;
+  return (
+    <Card
+      className={`!p-0 ${expanded ? 'border-brand-400 ring-1 ring-brand-300' : 'hover:border-brand-300'}`}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        aria-expanded={expanded}
+        className="w-full rounded-2xl p-3 text-left sm:p-5"
+      >
+        {contenido}
+        <span className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-700">
+          {expanded ? 'Ocultar' : 'Ver cuáles'}
+          <ChevronDown
+            size={14}
+            className={expanded ? 'rotate-180' : undefined}
+            aria-hidden="true"
+          />
+        </span>
+      </button>
     </Card>
   );
 }

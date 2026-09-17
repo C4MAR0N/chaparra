@@ -1,6 +1,10 @@
+const IMAGENES = ['image/jpeg', 'image/png', 'image/webp'];
+/* Un PDF no se puede reducir sin reescribirlo, así que se guarda tal cual y el
+ * tope es el que aguanta el navegador y la cuenta del servidor sin resentirse. */
+const MAX_PDF = 2 * 1024 * 1024;
+
 export async function compressImage(file: File): Promise<string> {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type))
-    throw new Error('Elige una imagen JPEG, PNG o WebP.');
+  if (!IMAGENES.includes(file.type)) throw new Error('Elige una imagen JPEG, PNG o WebP.');
   if (file.size > 2 * 1024 * 1024)
     throw new Error('La imagen supera 2 MB. Reduce su tamaño antes de adjuntarla.');
   const url = URL.createObjectURL(file);
@@ -24,4 +28,41 @@ export async function compressImage(file: File): Promise<string> {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+export const esPdf = (dataUrl: string) => dataUrl.startsWith('data:application/pdf');
+
+function leerPdf(file: File): Promise<string> {
+  if (file.size > MAX_PDF)
+    throw new Error('El PDF supera 2 MB. Adjunta solo las páginas que necesites.');
+  return new Promise((resolve, reject) => {
+    const lector = new FileReader();
+    lector.onload = () => resolve(String(lector.result));
+    lector.onerror = () => reject(new Error('No se ha podido leer este PDF.'));
+    lector.readAsDataURL(file);
+  });
+}
+
+/** Justificante de una factura: foto que se comprime, o PDF que se guarda entero. */
+export async function prepararAdjunto(file: File): Promise<string> {
+  if (file.type === 'application/pdf') return leerPdf(file);
+  if (!IMAGENES.includes(file.type)) throw new Error('Elige una foto (JPEG, PNG o WebP) o un PDF.');
+  return compressImage(file);
+}
+
+/*
+ * Abre el adjunto en otra pestaña. Los navegadores bloquean navegar a una URL
+ * `data:`, así que hay que pasar por un Blob. La URL temporal se libera al rato:
+ * antes no, porque el visor todavía la está cargando.
+ */
+export function abrirAdjunto(dataUrl: string) {
+  const coma = dataUrl.indexOf(',');
+  const cabecera = dataUrl.slice(5, coma);
+  const tipo = cabecera.slice(0, cabecera.indexOf(';')) || 'application/octet-stream';
+  const binario = atob(dataUrl.slice(coma + 1));
+  const bytes = new Uint8Array(binario.length);
+  for (let n = 0; n < binario.length; n++) bytes[n] = binario.charCodeAt(n);
+  const url = URL.createObjectURL(new Blob([bytes], { type: tipo }));
+  window.open(url, '_blank', 'noopener');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }

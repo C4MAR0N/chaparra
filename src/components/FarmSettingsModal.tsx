@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Download, FileSpreadsheet, HardDrive, LogOut, RefreshCw, Shield } from 'lucide-react';
-import type { Backup, FarmProfile, UserRecord } from '../types';
+import type { Backup, FarmProfile, Municipio, UserRecord } from '../types';
 import { useFarm } from '../context/FarmContext';
 import { hasMeat, hasMilk } from '../lib/domain';
 import { PROVINCIAS, especieLabel } from '../lib/constants';
 import { changePassword, updateUser } from '../services/auth';
 import { downloadBackup, readBackup } from '../services/backup';
 import { descargarExcel } from '../services/excel';
+import { buscarMunicipios } from '../services/tiempo';
 import { Banner, Button, Card, ConfirmModal, Field, Input, Modal, Select } from './ui';
 import { DeleteAccountModal } from './DeleteAccountModal';
 import { SecurityPrivacyModal } from './SecurityPrivacyModal';
@@ -34,7 +35,35 @@ export function FarmSettingsModal({
   const [backup, setBackup] = useState<Backup | null>(null),
     [deleting, setDeleting] = useState(false),
     [privacy, setPrivacy] = useState(false);
+  const [buscaMunicipio, setBuscaMunicipio] = useState(''),
+    [municipios, setMunicipios] = useState<Municipio[]>([]),
+    [buscandoMunicipio, setBuscandoMunicipio] = useState(false);
   const patch = (p: Partial<FarmProfile>) => setProfile({ ...profile, ...p });
+  /*
+   * Búsqueda con un respiro de 400 ms para no lanzar una petición por tecla, y
+   * cancelando la anterior: si el ganadero escribe rápido solo cuenta la última.
+   */
+  useEffect(() => {
+    const texto = buscaMunicipio.trim();
+    if (texto.length < 3) {
+      setMunicipios([]);
+      setBuscandoMunicipio(false);
+      return;
+    }
+    const controlador = new AbortController();
+    setBuscandoMunicipio(true);
+    const espera = setTimeout(() => {
+      buscarMunicipios(texto, controlador.signal)
+        .then(setMunicipios)
+        .catch(() => setMunicipios([]))
+        .finally(() => setBuscandoMunicipio(false));
+    }, 400);
+    return () => {
+      clearTimeout(espera);
+      controlador.abort();
+      setBuscandoMunicipio(false);
+    };
+  }, [buscaMunicipio]);
   function saveFarm(e: FormEvent) {
     e.preventDefault();
     update(d => ({
@@ -160,6 +189,56 @@ export function FarmSettingsModal({
                 ))}
               </Select>
             </Field>
+            <div className="sm:col-span-2">
+              <Field
+                label="Municipio para el tiempo"
+                help={
+                  profile.municipio
+                    ? `Previsión de ${profile.municipio.nombre}${profile.municipio.provincia ? ` (${profile.municipio.provincia})` : ''}.`
+                    : 'Escribe al menos 3 letras y elige tu municipio de la lista.'
+                }
+              >
+                <Input
+                  value={buscaMunicipio}
+                  placeholder={profile.municipio?.nombre ?? 'Oropesa'}
+                  onChange={e => setBuscaMunicipio(e.target.value)}
+                />
+              </Field>
+              {buscandoMunicipio && (
+                <p className="mt-2 text-sm text-stone-600" role="status">
+                  Buscando…
+                </p>
+              )}
+              {municipios.length > 0 && (
+                <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-xl border border-stone-200 p-1">
+                  {municipios.map(m => (
+                    <li key={`${m.nombre}-${m.lat}-${m.lon}`}>
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start text-left"
+                        onClick={() => {
+                          patch({ municipio: m });
+                          setBuscaMunicipio('');
+                          setMunicipios([]);
+                        }}
+                      >
+                        {m.nombre}
+                        {m.provincia ? ` · ${m.provincia}` : ''}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {profile.municipio && !buscaMunicipio && (
+                <Button
+                  variant="ghost"
+                  className="mt-1 text-red-800"
+                  onClick={() => patch({ municipio: undefined })}
+                >
+                  Quitar el municipio
+                </Button>
+              )}
+            </div>
             {hasMilk(profile) && (
               <>
                 <Field label="Ordeños al día">

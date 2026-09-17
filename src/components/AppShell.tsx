@@ -17,6 +17,7 @@ import { ProductionModule } from './ProductionModule';
 import { InvoiceModule } from './InvoiceModule';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { FarmSettingsModal } from './FarmSettingsModal';
+import { Tiempo } from './Tiempo';
 type Tab = 'herd' | 'production' | 'invoices' | 'reports';
 const tabs: { id: Tab; label: string; icon: typeof Leaf }[] = [
   { id: 'herd', label: 'Rebaño', icon: ClipboardList },
@@ -121,7 +122,13 @@ export function AppShell({
           className="app-main mx-auto max-w-7xl space-y-5 p-4 sm:p-8"
         >
           {notice && <Banner tone="success">{notice}</Banner>}
-          {tab === 'herd' && <CrotalList />}
+          {tab === 'herd' && (
+            <>
+              <CrotalList />
+              {/* El tiempo, debajo de la pantalla principal: en el campo la lluvia manda. */}
+              <Tiempo />
+            </>
+          )}
           {tab === 'production' && <ProductionModule onAnimals={() => setTab('herd')} />}
           {tab === 'invoices' && <InvoiceModule />}
           {tab === 'reports' && <AnalyticsDashboard />}

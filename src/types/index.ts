@@ -18,6 +18,14 @@ export interface Session {
   userId: string;
   expiresAt: number;
 }
+export interface Municipio {
+  nombre: string;
+  provincia: string;
+  lat: number;
+  lon: number;
+  /** Código INE de 5 dígitos, el que usa AEMET para la predicción municipal. */
+  codigoIne?: string;
+}
 export interface FarmProfile {
   nombreExplotacion: string;
   codigoRega?: string;
@@ -28,6 +36,8 @@ export interface FarmProfile {
   ordenosPorDia?: 1 | 2 | 3;
   precioLitroLecheEuro?: number;
   precioKgCarneEuro?: number;
+  /** Municipio para la previsión meteorológica. */
+  municipio?: Municipio;
   moneda: 'EUR';
 }
 export interface HealthRecord {

@@ -52,6 +52,18 @@ export function isFarm(v: unknown): v is FarmProfile {
     optional(v.ordenosPorDia, x => oneOf(x, [1, 2, 3])) &&
     optional(v.precioLitroLecheEuro, nonnegative) &&
     optional(v.precioKgCarneEuro, nonnegative) &&
+    optional(
+      v.municipio,
+      m =>
+        object(m) &&
+        nonempty(m.nombre) &&
+        str(m.provincia) &&
+        typeof m.lat === 'number' &&
+        Math.abs(m.lat) <= 90 &&
+        typeof m.lon === 'number' &&
+        Math.abs(m.lon) <= 180 &&
+        optional(m.codigoIne, x => typeof x === 'string' && /^\d{5}$/.test(x))
+    ) &&
     v.moneda === 'EUR'
   );
 }

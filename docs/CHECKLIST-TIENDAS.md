@@ -153,3 +153,29 @@ ahorra semanas.
 - [App testing requirements for new personal developer accounts — Play Console Help](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en)
 - [App Store Review Guidelines: Will Your Webview App Be Rejected? — MobiLoud](https://www.mobiloud.com/blog/app-store-review-guidelines-webview-wrapper)
 - [Rejected on Guideline 4.2.2 — Apple Developer Forums](https://developer.apple.com/forums/thread/82714)
+
+---
+
+## Anexo · Previsión meteorológica
+
+La app muestra 5 días con litros previstos bajo la pantalla principal.
+
+**Open-Meteo** (modelo ECMWF) funciona ya, sin clave ni servidor.
+
+**AEMET**, la fuente oficial, requiere tres pasos que debe dar el titular:
+
+1. Pedir la API key en
+   [opendata.aemet.es](https://opendata.aemet.es/centrodedescargas/altaUsuario) con el correo
+   de la explotación. Llega por correo en minutos.
+2. Añadirla como secreto del repositorio: *Settings → Secrets and variables → Actions →
+   New repository secret*, con el nombre exacto **`AEMET_API_KEY`**.
+3. Lanzar la tarea *Previsión de AEMET* a mano la primera vez (*Actions → Run workflow*).
+
+A partir de ahí se actualiza sola cuatro veces al día y la app pasa a mostrar los datos de
+AEMET, indicando en pantalla qué dato viene de cada fuente.
+
+> **La clave de AEMET caduca cada 3 meses.** Cuando caduque, la tarea fallará con un 401 y
+> GitHub avisará por correo. Hay que pedir una nueva y sustituir el secreto. La app sigue
+> funcionando con Open-Meteo mientras tanto, así que no se queda sin previsión.
+
+Los municipios que se descargan se listan en `tiempo-municipios.json`, en la raíz.

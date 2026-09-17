@@ -1,0 +1,43 @@
+name: Previsión de AEMET
+
+on:
+  schedule:
+    # Cuatro veces al día, que es lo que AEMET actualiza su predicción municipal.
+    - cron: '20 4,10,16,22 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tiempo
+  cancel-in-progress: true
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    # Sin la clave configurada no tiene sentido ejecutarlo.
+    if: ${{ github.repository_owner != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Descargar la predicción
+        env:
+          AEMET_API_KEY: ${{ secrets.AEMET_API_KEY }}
+        run: node scripts/tiempo-aemet.mjs
+
+      - name: Publicar si ha cambiado
+        run: |
+          if [ -n "$(git status --porcelain public/tiempo)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add public/tiempo
+            git commit -m "Previsión de AEMET actualizada"
+            git push
+          else
+            echo "Sin cambios en la previsión."
+          fi

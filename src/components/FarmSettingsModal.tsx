@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
-import { Download, LogOut, RefreshCw, Shield } from 'lucide-react';
+import { Download, FileSpreadsheet, HardDrive, LogOut, RefreshCw, Shield } from 'lucide-react';
 import type { Backup, FarmProfile, UserRecord } from '../types';
 import { useFarm } from '../context/FarmContext';
 import { hasMeat, hasMilk } from '../lib/domain';
 import { PROVINCIAS, especieLabel } from '../lib/constants';
 import { changePassword, updateUser } from '../services/auth';
 import { downloadBackup, readBackup } from '../services/backup';
+import { descargarExcel } from '../services/excel';
 import { Banner, Button, Card, ConfirmModal, Field, Input, Modal, Select } from './ui';
 import { DeleteAccountModal } from './DeleteAccountModal';
 import { SecurityPrivacyModal } from './SecurityPrivacyModal';
@@ -94,35 +95,26 @@ export function FarmSettingsModal({
   return (
     <Modal title="Ajustes y cuenta" onClose={onClose} wide>
       <Card className="space-y-4 border-brand-200 bg-brand-50">
-        <h3 className="section-heading">Copia de seguridad</h3>
+        <h3 className="section-heading">Exportar a Excel</h3>
         <p className="text-sm leading-relaxed text-stone-600">
-          No hay copia en la nube. Exporta toda tu explotación, fotos e historiales a JSON y guarda
-          el archivo en un lugar seguro. La copia no incluye contraseñas; al importar mantendrás el
-          acceso de esta cuenta.
+          Descarga tu explotación en una hoja de cálculo, con el rebaño, la sanidad, la producción y
+          las facturas en pestañas separadas. Para consultarla, pasársela al gestor o al
+          veterinario.
         </p>
         <Button
           onClick={() => {
-            downloadBackup(user, data);
-            setMessage('Copia preparada. Comprueba la carpeta de descargas.');
+            try {
+              descargarExcel(user, data);
+              setError('');
+              setMessage('Excel preparado. Comprueba la carpeta de descargas.');
+            } catch (e) {
+              setError(e instanceof Error ? e.message : 'No se ha podido crear el Excel.');
+            }
           }}
         >
-          <Download size={18} />
-          Exportar copia de seguridad
+          <FileSpreadsheet size={18} />
+          Exportar a Excel
         </Button>
-        <Field
-          label="Importar una copia JSON"
-          help="Solo copias de Chaparra v2. Verás un resumen antes de sustituir los datos."
-        >
-          <Input
-            type="file"
-            accept=".json,application/json"
-            disabled={busy}
-            onChange={e => {
-              void upload(e.target.files?.[0]);
-              e.target.value = '';
-            }}
-          />
-        </Field>
       </Card>
       {error && <Banner tone="error">{error}</Banner>}
       {message && <Banner tone="success">{message}</Banner>}
@@ -293,6 +285,44 @@ export function FarmSettingsModal({
           </Button>
         </form>
       </section>
+      <details className="border-t border-stone-200 pt-5">
+        <summary className="inline-flex min-h-12 cursor-pointer items-center gap-2 text-sm font-semibold text-stone-600">
+          <HardDrive size={18} />
+          Copia de seguridad y restauración
+        </summary>
+        <div className="mt-4 space-y-4">
+          <p className="text-sm leading-relaxed text-stone-600">
+            El Excel sirve para consultar, pero no se puede volver a cargar en la aplicación. Esta
+            copia en JSON es la única forma de recuperar tu explotación si se borran los datos del
+            navegador o cambias de dispositivo. Guárdala en un lugar seguro de vez en cuando.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              downloadBackup(user, data);
+              setError('');
+              setMessage('Copia preparada. Comprueba la carpeta de descargas.');
+            }}
+          >
+            <Download size={18} />
+            Descargar copia de seguridad
+          </Button>
+          <Field
+            label="Restaurar desde una copia"
+            help="Solo copias de Chaparra. Verás un resumen antes de sustituir los datos."
+          >
+            <Input
+              type="file"
+              accept=".json,application/json"
+              disabled={busy}
+              onChange={e => {
+                void upload(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+          </Field>
+        </div>
+      </details>
       <div className="flex flex-wrap gap-3 border-t border-stone-200 pt-5">
         <Button variant="secondary" onClick={() => setPrivacy(true)}>
           <Shield size={18} />

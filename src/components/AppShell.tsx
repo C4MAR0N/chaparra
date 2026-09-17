@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   BarChart3,
   ClipboardList,
-  Download,
   HardDrive,
   Leaf,
   LogOut,
@@ -12,7 +11,6 @@ import {
 } from 'lucide-react';
 import type { UserRecord } from '../types';
 import { useFarm } from '../context/FarmContext';
-import { downloadBackup } from '../services/backup';
 import { Banner, Button } from './ui';
 import { CrotalList } from './CrotalList';
 import { ProductionModule } from './ProductionModule';
@@ -35,7 +33,7 @@ export function AppShell({
   onSurvey: () => void;
   onUserChange: (user: UserRecord) => void;
 }) {
-  const { user, data, farm, notice } = useFarm();
+  const { user, farm, notice } = useFarm();
   const [tab, setTab] = useState<Tab>('herd'),
     [settings, setSettings] = useState(false);
   const nav = (mobile: boolean) =>
@@ -76,10 +74,6 @@ export function AppShell({
           {nav(false)}
         </nav>
         <div className="mt-auto space-y-3 border-t border-stone-200 pt-5">
-          <Button variant="secondary" className="w-full" onClick={() => downloadBackup(user, data)}>
-            <Download size={18} />
-            Copia de seguridad
-          </Button>
           <div className="py-2">
             <p className="text-sm font-semibold">{user.nombre}</p>
             <p className="mt-1 break-all text-xs text-stone-600">{user.email}</p>
@@ -111,14 +105,6 @@ export function AppShell({
               <HardDrive size={16} />
               En este navegador
             </span>
-            <Button
-              variant="ghost"
-              className="md:hidden"
-              aria-label="Exportar copia de seguridad"
-              onClick={() => downloadBackup(user, data)}
-            >
-              <Download size={22} />
-            </Button>
             <Button
               variant="ghost"
               className="md:hidden"

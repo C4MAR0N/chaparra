@@ -1,4 +1,4 @@
-import type { FarmData, FarmProfile, UserRecord } from '../types';
+import type { Animal, FarmData, FarmProfile, UserRecord } from '../types';
 import { crearLibro, type Sheet } from '../lib/xlsx';
 import { especieLabel } from '../lib/constants';
 import { accumulatedCost, age, hasMeat, hasMilk, today } from '../lib/domain';
@@ -10,6 +10,11 @@ import { accumulatedCost, age, hasMeat, hasMilk, today } from '../lib/domain';
  * declarada en la encuesta.
  *
  * No sirve para restaurar la app: para eso está la copia de seguridad en JSON.
+ *
+ * Se puede exportar la explotación entera o solo un grupo de animales —una
+ * manada, lo que haya filtrado en pantalla—. Al acotar, la sanidad, el ordeño y
+ * las pesadas se recortan a esos animales: un cuaderno del Pantano con las
+ * pesadas de la Virgen dentro no sería un cuaderno del Pantano.
  */
 
 const crotalPorId = (data: FarmData) => {
@@ -180,7 +185,7 @@ function hojaFacturas(data: FarmData): Sheet {
   };
 }
 
-function hojaResumen(user: UserRecord, data: FarmData, farm: FarmProfile): Sheet {
+function hojaResumen(user: UserRecord, data: FarmData, farm: FarmProfile, ambito: string): Sheet {
   const activos = data.animals.filter(a => a.activo);
   const ingresos = data.invoices
     .filter(f => f.tipo === 'Venta')
@@ -191,6 +196,7 @@ function hojaResumen(user: UserRecord, data: FarmData, farm: FarmProfile): Sheet
 
   const filas: [string, string | number][] = [
     ['Explotación', farm.nombreExplotacion],
+    ['Contenido de este archivo', ambito],
     ['Titular', farm.titular],
     ['Código REGA', farm.codigoRega || 'Sin indicar'],
     ['Provincia', farm.provincia || 'Sin indicar'],
@@ -215,22 +221,50 @@ function hojaResumen(user: UserRecord, data: FarmData, farm: FarmProfile): Sheet
   };
 }
 
-export function descargarExcel(user: UserRecord, data: FarmData) {
+export interface AmbitoExcel {
+  /** Qué se exporta, tal cual aparece en la hoja Resumen y en el nombre del archivo. */
+  etiqueta: string;
+  animales: Animal[];
+}
+
+/** Recorta la explotación a los animales elegidos, arrastrando lo que cuelga de ellos. */
+export function acotar(data: FarmData, animales: Animal[]): FarmData {
+  const ids = new Set(animales.map(a => a.id));
+  const crotales = new Set(animales.map(a => a.crotal));
+  return {
+    ...data,
+    animals: animales,
+    // Un ordeño del rebaño entero no es de ninguna manada en concreto.
+    milkRecords: data.milkRecords.filter(r => r.animalId && ids.has(r.animalId)),
+    weightRecords: data.weightRecords.filter(r => ids.has(r.animalId)),
+    // Las facturas no se llevan por cercado: solo viajan las que citan crotales.
+    invoices: data.invoices.filter(f => (f.crotalesRelacionados ?? []).some(c => crotales.has(c)))
+  };
+}
+
+export function descargarExcel(user: UserRecord, data: FarmData, ambito?: AmbitoExcel) {
   const farm = data.farm;
   if (!farm) throw new Error('No hay ninguna explotación configurada.');
+  if (ambito && !ambito.animales.length)
+    throw new Error('No hay animales en esta selección para exportar.');
 
-  const hojas: Sheet[] = [hojaResumen(user, data, farm), hojaRebano(data, farm)];
-  if (data.animals.some(a => a.historialSanitario.length)) hojas.push(hojaSanidad(data));
-  if (hasMilk(farm)) hojas.push(hojaOrdeno(data, farm));
-  if (hasMeat(farm)) hojas.push(hojaPesadas(data));
-  hojas.push(hojaFacturas(data));
+  const alcance = ambito ? acotar(data, ambito.animales) : data;
+  const etiqueta = ambito ? ambito.etiqueta : 'Explotación completa';
+
+  const hojas: Sheet[] = [hojaResumen(user, alcance, farm, etiqueta), hojaRebano(alcance, farm)];
+  if (alcance.animals.some(a => a.historialSanitario.length)) hojas.push(hojaSanidad(alcance));
+  if (hasMilk(farm)) hojas.push(hojaOrdeno(alcance, farm));
+  if (hasMeat(farm)) hojas.push(hojaPesadas(alcance));
+  if (!ambito || alcance.invoices.length) hojas.push(hojaFacturas(alcance));
 
   const blob = crearLibro(hojas);
   const url = URL.createObjectURL(blob);
   const enlace = document.createElement('a');
   enlace.href = url;
-  const nombre = farm.nombreExplotacion.replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '');
-  enlace.download = `${nombre || 'Chaparra'}_${today()}.xlsx`;
+  const limpio = (texto: string) => texto.replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '');
+  const nombre = limpio(farm.nombreExplotacion) || 'Chaparra';
+  const sufijo = ambito ? '_' + limpio(ambito.etiqueta) : '';
+  enlace.download = `${nombre}${sufijo}_${today()}.xlsx`;
   enlace.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

@@ -107,3 +107,47 @@ test('necesitan atención los animales activos en tratamiento, cuarentena u obse
     'un animal de baja ya no pide visita'
   );
 });
+
+test('acotar la exportación arrastra solo lo que cuelga de esos animales', async () => {
+  const { acotar } = await import('../src/services/excel.ts');
+  const pantano = animal('p1', { ubicacion: 'Pantano', crotal: 'ES1' });
+  const virgen = animal('v1', { ubicacion: 'Virgen', crotal: 'ES2' });
+  const data = {
+    farm: null,
+    animals: [pantano, virgen],
+    saleTemplate: { numeroFactura: '' },
+    milkRecords: [
+      { id: 'o1', fecha: '2026-01-01', animalId: 'p1', litros: 10 },
+      { id: 'o2', fecha: '2026-01-01', animalId: 'v1', litros: 8 },
+      { id: 'o3', fecha: '2026-01-01', litros: 40 }
+    ],
+    weightRecords: [
+      { id: 'w1', fecha: '2026-01-01', animalId: 'p1', pesoKg: 400 },
+      { id: 'w2', fecha: '2026-01-01', animalId: 'v1', pesoKg: 380 }
+    ],
+    invoices: [
+      { id: 'f1', fecha: '2026-01-01', crotalesRelacionados: ['ES1'] },
+      { id: 'f2', fecha: '2026-01-01', crotalesRelacionados: ['ES2'] },
+      { id: 'f3', fecha: '2026-01-01' }
+    ]
+  };
+  const solo = acotar(data, [pantano]);
+  assert.deepEqual(
+    solo.animals.map(a => a.id),
+    ['p1']
+  );
+  assert.deepEqual(
+    solo.milkRecords.map(r => r.id),
+    ['o1'],
+    'el ordeño del rebaño entero no es de ninguna manada'
+  );
+  assert.deepEqual(
+    solo.weightRecords.map(r => r.id),
+    ['w1']
+  );
+  assert.deepEqual(
+    solo.invoices.map(f => f.id),
+    ['f1'],
+    'solo viajan las facturas que citan crotales de la manada'
+  );
+});

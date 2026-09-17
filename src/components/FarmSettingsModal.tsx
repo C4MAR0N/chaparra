@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Download, FileSpreadsheet, HardDrive, LogOut, RefreshCw, Shield } from 'lucide-react';
 import type { Backup, FarmProfile, Municipio, UserRecord } from '../types';
 import { useFarm } from '../context/FarmContext';
-import { hasMeat, hasMilk } from '../lib/domain';
+import { hasMeat, hasMilk, porUbicacion, ubicacionDe } from '../lib/domain';
 import { PROVINCIAS, especieLabel } from '../lib/constants';
 import { changePassword, updateUser } from '../services/auth';
 import { downloadBackup, readBackup } from '../services/backup';
@@ -37,6 +37,8 @@ export function FarmSettingsModal({
     [deleting, setDeleting] = useState(false),
     [privacy, setPrivacy] = useState(false);
   const [locales] = useState(() => explotacionesLocales(user.id));
+  const [ambito, setAmbito] = useState('');
+  const manadas = porUbicacion(data.animals);
   const [aTraer, setATraer] = useState<(typeof locales)[number] | null>(null);
   const [buscaMunicipio, setBuscaMunicipio] = useState(''),
     [municipios, setMunicipios] = useState<Municipio[]>([]),
@@ -133,10 +135,31 @@ export function FarmSettingsModal({
           las facturas en pestañas separadas. Para consultarla, pasársela al gestor o al
           veterinario.
         </p>
+        {manadas.length > 1 && (
+          <Field label="Qué exportar">
+            <Select value={ambito} onChange={e => setAmbito(e.target.value)}>
+              <option value="">Explotación entera</option>
+              {manadas.map(m => (
+                <option key={m.ubicacion} value={m.ubicacion}>
+                  {m.ubicacion} ({m.total} animales)
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Button
           onClick={() => {
             try {
-              descargarExcel(user, data);
+              descargarExcel(
+                user,
+                data,
+                ambito
+                  ? {
+                      etiqueta: ambito,
+                      animales: data.animals.filter(a => ubicacionDe(a) === ambito)
+                    }
+                  : undefined
+              );
               setError('');
               setMessage('Excel preparado. Comprueba la carpeta de descargas.');
             } catch (e) {
@@ -145,7 +168,7 @@ export function FarmSettingsModal({
           }}
         >
           <FileSpreadsheet size={18} />
-          Exportar a Excel
+          {ambito ? `Exportar ${ambito}` : 'Exportar a Excel'}
         </Button>
       </Card>
       {error && <Banner tone="error">{error}</Banner>}

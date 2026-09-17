@@ -1,5 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, HeartPulse, MapPin, Plus, Search, Tag } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  FileSpreadsheet,
+  HeartPulse,
+  MapPin,
+  Plus,
+  Search,
+  Tag
+} from 'lucide-react';
 import type { Animal } from '../types';
 import { useFarm } from '../context/FarmContext';
 import { ESPECIES, ESTADOS, especieLabel } from '../lib/constants';
@@ -12,6 +21,7 @@ import {
   ubicacionDe
 } from '../lib/domain';
 import { Badge, Button, Card, EmptyState, Field, Input, Select, StatTile } from './ui';
+import { descargarExcel } from '../services/excel';
 import { AnimalFormModal } from './AnimalFormModal';
 import { AnimalDetailModal } from './AnimalDetailModal';
 
@@ -21,7 +31,7 @@ import { AnimalDetailModal } from './AnimalDetailModal';
 const VISIBLES_SIN_FILTRO = 5;
 
 export function CrotalList() {
-  const { data, farm } = useFarm();
+  const { data, farm, user, notify } = useFarm();
   const animals = data.animals;
   const [search, setSearch] = useState(''),
     [species, setSpecies] = useState(''),
@@ -88,6 +98,26 @@ export function CrotalList() {
     reset();
     setHealth('atencion');
     irAlListado();
+  }
+  /*
+   * Descargar lo que se está mirando. Con la ubicación como único filtro el
+   * archivo sale a nombre de la manada, que es como lo va a pedir el veterinario.
+   */
+  function exportar() {
+    const soloUbicacion =
+      ubicacion && !search && !species && !health && !sex && active === 'active';
+    try {
+      descargarExcel(
+        user,
+        data,
+        hayFiltros
+          ? { etiqueta: soloUbicacion ? ubicacion : 'Selección del listado', animales: filtered }
+          : undefined
+      );
+      notify('Excel preparado. Comprueba la carpeta de descargas.');
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'No se ha podido crear el Excel.');
+    }
   }
   function verManada(nombre: string) {
     reset();
@@ -251,9 +281,15 @@ export function CrotalList() {
               {filtered.length === 1 ? 'animal encontrado' : 'animales encontrados'}
               {ubicacion && ` en ${ubicacion}`}
             </p>
-            <Button variant="ghost" size="sm" onClick={reset}>
-              Restablecer filtros
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={exportar}>
+                <FileSpreadsheet size={16} />
+                Excel
+              </Button>
+              <Button variant="ghost" size="sm" onClick={reset}>
+                Restablecer
+              </Button>
+            </div>
           </div>
           {!filtered.length ? (
             <Card>

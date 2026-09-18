@@ -87,16 +87,30 @@ const CLAVES_IMPORTE: RegExp[] = [
   /\btotal\b/i
 ];
 
+/* Líneas que llevan una cantidad de dinero que forma parte del total: la base,
+ * los impuestos y los subtotales. Una línea de artículo no entra. */
+const LINEA_DE_DINERO =
+  /base|imponible|iva|i\.v\.a|igic|impuesto|subtotal|sub-total|total|importe/i;
+/* Unidades que delatan una cantidad que NO es dinero aunque lleve decimales:
+ * «42,98 Litros» en un ticket de gasolinera es mayor que el total en euros. */
+const LINEA_DE_MEDIDA = /(litros?|ltr|kg|kilos?|uds?|unidades?|cantidad|qte|cant\.)/i;
+
 function buscarImporte(lineas: string[]): number | undefined {
-  const todas = lineas.flatMap(importesDe).map(Math.abs);
-  const maximo = todas.length ? Math.max(...todas) : 0;
   /*
-   * El total de una factura no puede ser menor que su base ni que ninguna de
-   * sus líneas: es la suma de todas. Si lo que hay junto a «TOTAL» sale menor
-   * que la mayor cantidad del papel, la lectura está rota y es mejor no
-   * proponer nada. Sin esta comprobación, una foto movida leyó «1.404,70» como
-   * «1,40» y lo daba por bueno porque estaba en la línea correcta.
+   * El total es la suma de la base y los impuestos, así que no puede ser menor
+   * que ninguno de ellos. Si lo que hay junto a «TOTAL» sale menor, la lectura
+   * está rota: una foto movida leyó «1.404,70» como «1,40» y lo daba por bueno
+   * porque estaba en la línea correcta.
+   *
+   * Solo se comparan las líneas que hablan de dinero. Compararlo con todas las
+   * cifras del papel era demasiado bruto: un ticket de gasolinera pone «42,98
+   * Litros» y con eso rechazaba un total de 40,70 € perfectamente leído.
    */
+  const deDinero = lineas
+    .filter(l => LINEA_DE_DINERO.test(l) && !LINEA_DE_MEDIDA.test(l))
+    .flatMap(importesDe)
+    .map(Math.abs);
+  const maximo = deDinero.length ? Math.max(...deDinero) : 0;
   const coherente = (valor: number) => (valor >= maximo ? valor : undefined);
   for (const clave of CLAVES_IMPORTE) {
     for (let i = lineas.length - 1; i >= 0; i--) {

@@ -22,11 +22,15 @@ const MAX_PAGINAS = 5;
 /** Con menos texto que esto, el PDF es un escaneo: hay que pasarlo por el lector. */
 const MINIMO_TEXTO = 40;
 /*
- * Por debajo de esta confianza del lector no se propone nada. Tesseract la da
- * de 0 a 100 y con una foto legible ronda el 90; cuando baja de aquí, lo que
- * devuelve ya no son erratas sueltas sino cifras distintas de las del papel.
+ * Por debajo de esta confianza del lector no se propone nada.
+ *
+ * Estaba en 70, y con tickets reales fotografiados ninguno llegaba: se quedaban
+ * entre 50 y 63 aun leyendo bien el total y la fecha. Se baja a 50 porque el
+ * importe ya no depende solo de esto: no se propone nada sin una palabra que
+ * diga «total», y lo que salga tiene que cuadrar con la base y los impuestos.
+ * Son esas dos reglas las que impiden un número falso, no el listón.
  */
-const CONFIANZA_MINIMA = 70;
+const CONFIANZA_MINIMA = 50;
 /** Ancho al que se rasteriza un PDF escaneado: por debajo, el lector no acierta. */
 const ANCHO_OCR = 2000;
 
@@ -132,13 +136,24 @@ async function leerConElSistema(fuente: Blob): Promise<string | null> {
  *
  * Tesseract no espera una fotografía: espera algo parecido a un escaneo, negro
  * sobre blanco. Darle el JPEG en color tal como sale de la cámara es lo que
- * peor funciona, porque el papel nunca es blanco uniforme —tiene la sombra del
- * propio móvil, el reflejo de la ventana y el color de la mesa—.
+ * peor funciona: con un ticket de verdad la confianza salía en 23 sobre 100 y
+ * el texto era ruido.
  *
- * Se pasa a gris y se umbraliza por zonas: cada píxel se compara con la media
- * de su vecindario en vez de con un valor fijo. Así una esquina en penumbra se
- * binariza con su propio listón y no se convierte en un manchón negro, que es
- * lo que arruina la lectura de un ticket fotografiado encima de una mesa.
+ * Se divide cada píxel por el brillo medio de su entorno amplio. Eso estima el
+ * papel y lo cancela: se van de golpe la sombra del propio móvil, el reflejo de
+ * la ventana y el color de la mesa, y queda tinta sobre blanco aunque el
+ * original tuviera poquísimo contraste. Después se separa en dos tonos con el
+ * umbral de Otsu, que lo elige a partir de la propia imagen en vez de con un
+ * número fijo.
+ *
+ * Con el mismo ticket, esto sube la confianza de 23 a más de 60 y encima tarda
+ * siete veces menos, porque a Tesseract le cuesta mucho menos una imagen ya
+ * binarizada que una fotografía.
+ *
+ * Se probó antes el umbral por vecindario pequeño (comparar cada píxel con la
+ * media de lo que tiene al lado). Con letra impresa sobre papel blanco va bien,
+ * pero con un ticket térmico descolorido la letra apenas es más oscura que su
+ * entorno inmediato y desaparecía entera: el lector devolvía texto vacío.
  */
 async function prepararParaLeer(fuente: Blob): Promise<Blob> {
   const bitmap = await createImageBitmap(fuente);
@@ -153,14 +168,14 @@ async function prepararParaLeer(fuente: Blob): Promise<Blob> {
     const { data, width, height } = imagen;
 
     // Gris por luminancia, que respeta cómo ve el ojo y separa mejor la tinta.
-    const gris = new Uint8ClampedArray(width * height);
+    const gris = new Float32Array(width * height);
     for (let i = 0, p = 0; i < data.length; i += 4, p++)
-      gris[p] = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+      gris[p] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
 
     /*
-     * Media por zonas con una imagen integral: permite calcular la media de
-     * cualquier recuadro en cuatro sumas, así que el umbral por vecindario sale
-     * igual de rápido para una foto de doce megapíxeles que para una pequeña.
+     * Imagen integral: da la media de cualquier recuadro en cuatro sumas, así
+     * que estimar el fondo cuesta lo mismo con una foto de doce megapíxeles que
+     * con una pequeña.
      */
     const integral = new Float64Array((width + 1) * (height + 1));
     for (let y = 0; y < height; y++) {
@@ -170,7 +185,10 @@ async function prepararParaLeer(fuente: Blob): Promise<Blob> {
         integral[(y + 1) * (width + 1) + x + 1] = integral[y * (width + 1) + x + 1] + fila;
       }
     }
-    const radio = Math.max(8, Math.round(Math.min(width, height) / 40));
+
+    // Radio amplio a propósito: tiene que abarcar el papel, no la letra.
+    const radio = Math.max(12, Math.round(Math.min(width, height) / 12));
+    const normal = new Float32Array(width * height);
     for (let y = 0; y < height; y++) {
       const y0 = Math.max(0, y - radio),
         y1 = Math.min(height - 1, y + radio);
@@ -183,14 +201,40 @@ async function prepararParaLeer(fuente: Blob): Promise<Blob> {
           integral[y0 * (width + 1) + x1 + 1] -
           integral[(y1 + 1) * (width + 1) + x0] +
           integral[y0 * (width + 1) + x0];
-        /* El 88 % de la media local: el margen evita que el ruido del papel en
-         * blanco se convierta en puntos negros por todas partes. */
-        const claro = gris[y * width + x] * 100 > (suma / area) * 88;
-        const v = claro ? 255 : 0;
-        const i = (y * width + x) * 4;
-        data[i] = data[i + 1] = data[i + 2] = v;
-        data[i + 3] = 255;
+        const fondo = Math.max(1, suma / area);
+        normal[y * width + x] = Math.min(255, (gris[y * width + x] / fondo) * 200);
       }
+    }
+
+    // Otsu: el corte que mejor separa los dos montones de la propia imagen.
+    const histograma = new Array<number>(256).fill(0);
+    for (const v of normal) histograma[Math.min(255, v | 0)]++;
+    const total = normal.length;
+    let suma = 0;
+    for (let t = 0; t < 256; t++) suma += t * histograma[t];
+    let sumaFondo = 0,
+      pesoFondo = 0,
+      mejor = 0,
+      umbral = 180;
+    for (let t = 0; t < 256; t++) {
+      pesoFondo += histograma[t];
+      if (!pesoFondo) continue;
+      const pesoFrente = total - pesoFondo;
+      if (!pesoFrente) break;
+      sumaFondo += t * histograma[t];
+      const media = sumaFondo / pesoFondo - (suma - sumaFondo) / pesoFrente;
+      const entre = pesoFondo * pesoFrente * media * media;
+      if (entre > mejor) {
+        mejor = entre;
+        umbral = t;
+      }
+    }
+
+    for (let p = 0; p < normal.length; p++) {
+      const v = normal[p] > umbral ? 255 : 0;
+      const i = p * 4;
+      data[i] = data[i + 1] = data[i + 2] = v;
+      data[i + 3] = 255;
     }
     ctx.putImageData(imagen, 0, 0);
     return await new Promise<Blob>(r => lienzo.toBlob(b => r(b ?? fuente), 'image/png'));
@@ -226,14 +270,15 @@ async function leerConTesseract(fuente: Blob, avisar: Progreso): Promise<string>
   try {
     /*
      * Dos pasadas con distinta segmentación y se queda la mejor. La automática
-     * acierta con una factura A4; la de bloque único va mejor con un ticket
-     * estrecho, donde la automática se empeña en ver columnas que no existen.
+     * La de columna única gana casi siempre con un ticket, que es una tira
+     * estrecha; la automática, con una factura A4 repartida en zonas. Medido
+     * sobre cuatro tickets reales: la de columna ganó en tres.
      */
-    await worker.setParameters({ tessedit_pageseg_mode: '6' as never });
-    const bloque = await worker.recognize(fuente);
+    await worker.setParameters({ tessedit_pageseg_mode: '4' as never });
+    const columna = await worker.recognize(fuente);
     await worker.setParameters({ tessedit_pageseg_mode: '3' as never });
     const automatica = await worker.recognize(fuente);
-    const { data } = bloque.data.confidence >= automatica.data.confidence ? bloque : automatica;
+    const { data } = columna.data.confidence >= automatica.data.confidence ? columna : automatica;
     /*
      * Una foto mala no se queda a medias: inventa. En las pruebas, una imagen
      * pequeña, movida y con poco contraste devolvió 0,33 € donde ponía 674,43,

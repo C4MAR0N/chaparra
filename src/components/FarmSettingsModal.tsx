@@ -6,6 +6,7 @@ import { hasMeat, hasMilk, porUbicacion, ubicacionDe } from '../lib/domain';
 import { PROVINCIAS, especieLabel } from '../lib/constants';
 import { changePassword, updateUser } from '../services/auth';
 import { downloadBackup, readBackup } from '../services/backup';
+import { describirFusion, fusionarCopia } from '../services/fusionarCopia';
 import { descargarExcel } from '../services/excel';
 import { buscarMunicipios } from '../services/tiempo';
 import { explotacionesLocales, traerExplotacion } from './MigrarExplotacion';
@@ -440,7 +441,7 @@ export function FarmSettingsModal({
           </Button>
           <Field
             label="Restaurar desde una copia"
-            help="Solo copias de Chaparra. Verás un resumen antes de sustituir los datos."
+            help="Solo copias de Chaparra. Antes de tocar nada verás qué trae y podrás elegir entre añadirla a lo que ya tienes o sustituirlo."
           >
             <Input
               type="file"
@@ -490,30 +491,55 @@ export function FarmSettingsModal({
         </ConfirmModal>
       )}
       {backup && (
-        <ConfirmModal
-          title="Sustituir los datos de esta cuenta"
-          danger={false}
-          confirmLabel="Importar y sustituir"
-          onClose={() => setBackup(null)}
-          onConfirm={() => {
-            update(() => backup.data);
-            setProfile(backup.data.farm!);
-            setBackup(null);
-            notify('Copia importada. Se ha conservado tu cuenta de acceso.');
-            onClose();
-          }}
-        >
-          <p className="mb-3 font-semibold">{backup.data.farm?.nombreExplotacion}</p>
-          <p>
-            {backup.data.animals.length} animales · {backup.data.invoices.length} facturas ·{' '}
-            {backup.data.milkRecords.length + backup.data.weightRecords.length} registros de
-            producción.
-          </p>
-          <p className="mt-3">
-            Esta copia sustituirá todos los datos de explotación de {user.email}. Las otras cuentas
-            no se modificarán. Exporta primero tus datos actuales si quieres conservarlos.
-          </p>
-        </ConfirmModal>
+        <Modal title="Importar una copia" onClose={() => setBackup(null)}>
+          <div className="space-y-3 text-sm leading-relaxed text-stone-600">
+            <p className="font-semibold text-stone-900">
+              {backup.data.farm?.nombreExplotacion ?? 'Explotación sin nombre'}
+            </p>
+            <p>
+              La copia trae {backup.data.animals.length} animales, {backup.data.invoices.length}{' '}
+              facturas y {backup.data.milkRecords.length + backup.data.weightRecords.length}{' '}
+              registros de producción.
+            </p>
+            <Banner tone="success">
+              {describirFusion(fusionarCopia(data, backup.data).resumen, true)}
+            </Banner>
+            <p>
+              <strong>Añadir</strong> suma lo que falte y deja intacto lo que ya tienes: si un
+              crotal ya está en tu explotación, se respeta tu ficha. <strong>Sustituir</strong>{' '}
+              borra todo lo que hay ahora en {user.email} y lo cambia por esta copia.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button variant="secondary" onClick={() => setBackup(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                update(() => backup.data);
+                setProfile(backup.data.farm!);
+                setBackup(null);
+                notify('Copia importada. Se ha conservado tu cuenta de acceso.');
+                onClose();
+              }}
+            >
+              Importar y sustituir
+            </Button>
+            <Button
+              onClick={() => {
+                const { datos, resumen } = fusionarCopia(data, backup.data);
+                update(() => datos);
+                if (datos.farm) setProfile(datos.farm);
+                setBackup(null);
+                notify(describirFusion(resumen));
+                onClose();
+              }}
+            >
+              Añadir sin sustituir
+            </Button>
+          </div>
+        </Modal>
       )}
       {privacy && <SecurityPrivacyModal onClose={() => setPrivacy(false)} />}
       {deleting && (

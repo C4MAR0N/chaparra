@@ -16,8 +16,8 @@ import {
   weightStats
 } from '../lib/domain';
 import { especieLabel } from '../lib/constants';
-import type { MilkRecord } from '../types';
-import { Button, Card, EmptyState, Field, Input, StatTile } from './ui';
+import type { Especie, MilkRecord } from '../types';
+import { Button, Card, EmptyState, Field, Input, SegmentedControl, StatTile } from './ui';
 import { DataChart, SeriesChart } from './Charts';
 
 function distribution(values: string[]) {
@@ -62,11 +62,24 @@ export function AnalyticsDashboard() {
   const [desde, setDesde] = useState(() => haceUnAno(hoy));
   const [hasta, setHasta] = useState(hoy);
   const [campoAltas, setCampoAltas] = useState<'fechaAlta' | 'fechaNacimiento'>('fechaAlta');
+  /*
+   * Con vacuno y caprino en la misma explotación, mezclar las dos en cada
+   * gráfica no dice nada: las edades, los partos y las manadas no se parecen.
+   * Vacío quiere decir toda la explotación.
+   */
+  const [especie, setEspecie] = useState<Especie | ''>('');
   const rangoValido = Boolean(desde && hasta) && hasta >= desde;
   const enRango = (fecha: string | undefined) =>
     rangoValido && !!fecha && fecha >= desde && fecha <= hasta;
 
-  const active = data.animals.filter(esActivo);
+  /*
+   * Solo se acota el ganado. Una factura de gasóleo no es de una especie, y
+   * un ordeño apuntado como total del día tampoco: repartirlos sería
+   * inventárselo, así que las cuentas y la leche siguen siendo de toda la
+   * explotación y la pantalla lo dice.
+   */
+  const animales = especie ? data.animals.filter(a => a.especie === especie) : data.animals;
+  const active = animales.filter(esActivo);
   const invoices = data.invoices.filter(i => enRango(i.fecha));
   const expenses = invoices
       .filter(i => i.tipo === 'Compra / Gasto')
@@ -91,13 +104,13 @@ export function AnalyticsDashboard() {
     0
   );
   const dias = rangoValido ? daysBetween(desde, hasta) + 1 : 0;
-  const manadas = useMemo(() => porUbicacion(data.animals), [data.animals]);
+  const manadas = useMemo(() => porUbicacion(animales), [animales]);
   /* Una gráfica de una sola barra no informa de nada: si la explotación tiene
    * una especie, el reparto por especie sobra. */
   const variasEspecies = new Set(active.map(a => a.especie)).size > 1;
   const altas = useMemo(
-    () => (rangoValido ? altasPorMes(data.animals, desde, hasta, campoAltas) : []),
-    [data.animals, desde, hasta, campoAltas, rangoValido]
+    () => (rangoValido ? altasPorMes(animales, desde, hasta, campoAltas) : []),
+    [animales, desde, hasta, campoAltas, rangoValido]
   );
 
   const atajo = (nuevoDesde: string, nuevoHasta: string) => () => {
@@ -150,34 +163,31 @@ export function AnalyticsDashboard() {
             Últimos 12 meses
           </Button>
         </div>
+        {farm.especies.length > 1 && (
+          <SegmentedControl
+            label="Ganado que se analiza"
+            value={especie}
+            options={[
+              { value: '' as Especie | '', label: 'Todo' },
+              ...farm.especies.map(e => ({ value: e as Especie | '', label: especieLabel(e) }))
+            ]}
+            onChange={setEspecie}
+          />
+        )}
       </Card>
+      <h2 className="section-heading">
+        {especie ? `El ganado ${especieLabel(especie).toLowerCase()}` : 'El ganado'}
+      </h2>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Animales activos hoy" value={active.length} />
         <StatTile
           label="Altas del periodo"
-          value={data.animals.filter(a => enRango(a.fechaAlta)).length}
+          value={animales.filter(a => enRango(a.fechaAlta)).length}
         />
         <StatTile
           label="Bajas del periodo"
-          value={data.animals.filter(a => enRango(a.fechaBaja)).length}
+          value={animales.filter(a => enRango(a.fechaBaja)).length}
         />
-        <StatTile
-          label="Balance del periodo"
-          value={euro(income - expenses)}
-          help="Ingresos registrados menos gastos."
-        />
-        <StatTile label="Ingresos registrados" value={euro(income)} />
-        <StatTile label="Gastos registrados" value={euro(expenses)} />
-        {hasMilk(farm) && (
-          <>
-            <StatTile label="Litros del periodo" value={number(liters) + ' L'} />
-            <StatTile
-              label="Ingreso lácteo estimado"
-              value={euro(liters * (farm.precioLitroLecheEuro ?? 0))}
-              help="No se suma al balance de facturas."
-            />
-          </>
-        )}
         {hasMeat(farm) && (
           <StatTile
             label="Valor estimado de carne hoy"
@@ -244,43 +254,6 @@ export function AnalyticsDashboard() {
           data={distribution(active.map(a => a.estadoSanitario))}
           unit="animales"
         />
-        <DataChart
-          title="Gastos por categoría"
-          data={Object.entries(expensesByCategory).map(([label, value]) => ({
-            label: label
-              .replace('Pienso/Alimentación', 'Alimentación')
-              .replace('Veterinario/Sanidad', 'Sanidad')
-              .replace('Maquinaria/Combustible', 'Maquinaria'),
-            value
-          }))}
-          unit="€"
-        />
-        {hasMilk(farm) && (
-          <DataChart
-            title={dias > DIAS_PARA_AGRUPAR ? 'Producción de leche por mes' : 'Producción de leche'}
-            data={
-              !ordenos.length
-                ? []
-                : dias > DIAS_PARA_AGRUPAR
-                  ? litrosPorMes(ordenos)
-                  : milkSeries(ordenos, dias, hasta)
-            }
-            unit="L"
-            line
-          />
-        )}
-        <DataChart
-          title="Ingresos y gastos del periodo"
-          data={
-            invoices.length
-              ? [
-                  { label: 'Ingresos', value: income },
-                  { label: 'Gastos', value: expenses }
-                ]
-              : []
-          }
-          unit="€"
-        />
       </div>
       {manadas.length > 0 && (
         <Card className="space-y-3">
@@ -306,10 +279,76 @@ export function AnalyticsDashboard() {
           </ul>
         </Card>
       )}
+
+      <h2 className="section-heading">Las cuentas y la producción</h2>
+      {especie && (
+        <p className="-mt-3 text-sm text-stone-600">
+          De toda la explotación. Una factura de gasóleo o un ordeño apuntado como total del día no
+          son de una especie en concreto, así que aquí no se separan.
+        </p>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile
+          label="Balance del periodo"
+          value={euro(income - expenses)}
+          help="Ingresos registrados menos gastos."
+        />
+        <StatTile label="Ingresos registrados" value={euro(income)} />
+        <StatTile label="Gastos registrados" value={euro(expenses)} />
+        {hasMilk(farm) && (
+          <>
+            <StatTile label="Litros del periodo" value={number(liters) + ' L'} />
+            <StatTile
+              label="Ingreso lácteo estimado"
+              value={euro(liters * (farm.precioLitroLecheEuro ?? 0))}
+              help="No se suma al balance de facturas."
+            />
+          </>
+        )}
+      </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <DataChart
+          title="Gastos por categoría"
+          data={Object.entries(expensesByCategory).map(([label, value]) => ({
+            label: label
+              .replace('Pienso/Alimentación', 'Alimentación')
+              .replace('Veterinario/Sanidad', 'Sanidad')
+              .replace('Maquinaria/Combustible', 'Maquinaria'),
+            value
+          }))}
+          unit="€"
+        />
+        <DataChart
+          title="Ingresos y gastos del periodo"
+          data={
+            invoices.length
+              ? [
+                  { label: 'Ingresos', value: income },
+                  { label: 'Gastos', value: expenses }
+                ]
+              : []
+          }
+          unit="€"
+        />
+        {hasMilk(farm) && (
+          <DataChart
+            title={dias > DIAS_PARA_AGRUPAR ? 'Producción de leche por mes' : 'Producción de leche'}
+            data={
+              !ordenos.length
+                ? []
+                : dias > DIAS_PARA_AGRUPAR
+                  ? litrosPorMes(ordenos)
+                  : milkSeries(ordenos, dias, hasta)
+            }
+            unit="L"
+            line
+          />
+        )}
+      </div>
       <p className="text-xs text-stone-600">
         Las distribuciones por ubicación, especie y sanidad muestran el estado actual del ganado
         activo. El balance usa las facturas del periodo seleccionado; las estimaciones de producción
-        no son ingresos cobrados.
+        no son ingresos cobrados y no se suman a él.
       </p>
     </div>
   );

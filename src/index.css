@@ -101,9 +101,6 @@
   .bottom-nav {
     padding-bottom: max(8px, env(safe-area-inset-bottom));
   }
-  .app-main {
-    padding-bottom: calc(100px + env(safe-area-inset-bottom));
-  }
 }
 dialog {
   margin: auto;
@@ -115,6 +112,16 @@ dialog::backdrop {
 .recharts-text {
   font-size: 13px;
   fill: #57534e;
+}
+/*
+ * Hueco para la barra de navegación del móvil, que va fija y flotando encima
+ * del contenido. Esta regla vive FUERA de `@layer components` a propósito: ahí
+ * dentro la pisaba la utilidad `p-4` de Tailwind, el hueco se quedaba en 16 px
+ * y lo último de la pantalla —el aviso de ayuda con su correo— quedaba debajo
+ * de la barra, visible a medias y sin poder tocarlo.
+ */
+.app-main {
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 @media (min-width: 768px) {
   .app-main {

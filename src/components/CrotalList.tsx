@@ -4,6 +4,7 @@ import {
   ChevronRight,
   FileSpreadsheet,
   HeartPulse,
+  Mail,
   MapPin,
   Plus,
   Search,
@@ -412,15 +413,21 @@ export function CrotalList({ especie }: { especie: Especie }) {
           )}
         </>
       )}
-      <Card className="space-y-2">
+      <Card className="space-y-3">
         <h2 className="section-heading">¿Tienes los datos de tu explotación en otro sitio?</h2>
         <p className="text-sm leading-relaxed text-stone-600">
-          ¿No sabes cómo meterlos aquí? Nosotros te ayudamos: escríbenos a{' '}
-          <a href={MAILTO_MIGRACION} className="font-semibold text-brand-700 underline">
-            chaparra@agrovanza.es
-          </a>{' '}
-          y le echamos un vistazo.
+          En papel, en un Excel o en otra aplicación, y no sabes cómo meterlos aquí. Escríbenos y
+          les echamos un vistazo.
         </p>
+        {/* Enlace con cuerpo de botón: un correo subrayado dentro de un párrafo
+            es un objetivo de 18 px, y con el dedo no se acierta. */}
+        <a
+          href={MAILTO_MIGRACION}
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-700 bg-brand-700 px-4 py-3 text-sm font-semibold text-white sm:w-auto"
+        >
+          <Mail size={18} aria-hidden="true" />
+          Escribir a chaparra@agrovanza.es
+        </a>
       </Card>
       {editing && (
         <AnimalFormModal

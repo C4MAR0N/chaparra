@@ -70,6 +70,12 @@ export default function App() {
      */
     if (r.estado !== 'sincronizado')
       setFalloAlTraer(r.mensaje || 'No se ha podido contactar con el servidor.');
+    /*
+     * La marca de encuesta hecha es de cada dispositivo y no viaja al servidor.
+     * Si la explotación ha bajado, la encuesta ya se rellenó en su día en otro
+     * aparato: se anota aquí para que el resto de la aplicación lo sepa.
+     */
+    if (r.datos?.farm) setUser(marcarEncuestaCompletada(u.id));
     setTrayendo(false);
     setTraido(n => n + 1);
   }, []);
@@ -102,6 +108,13 @@ export default function App() {
     setUser(updated);
     setSurvey(false);
   }
+  /*
+   * Todavía no se ha intentado bajar la explotación de esta cuenta. Se mira en
+   * el propio render para no enseñar la encuesta durante el fotograma que va
+   * desde que aparece el usuario hasta que arranca el efecto que la baja.
+   */
+  const pendienteDeTraer =
+    !!user && user.origen === 'nube' && !cargando && intentado.current !== user.id;
   // `traido` fuerza releer la explotación cuando la primera bajada la trae.
   const farm = useMemo(() => (user ? loadData(user.id).farm : null), [user, traido]);
   /*
@@ -130,7 +143,7 @@ export default function App() {
         </div>
       ) : !user ? (
         <AuthScreen onAccess={setUser} />
-      ) : trayendo ? (
+      ) : trayendo || (pendienteDeTraer && !farm) ? (
         <div className="flex min-h-screen items-center justify-center p-6">
           <p className="text-stone-600" role="status">
             Trayendo tu explotación…
@@ -158,7 +171,13 @@ export default function App() {
             Cerrar sesión
           </Button>
         </div>
-      ) : !user.onboardingCompletedAt || !farm || survey ? (
+      ) : /*
+       * La encuesta existe para crear la explotación, así que solo se enseña
+       * cuando falta. Antes la forzaba `onboardingCompletedAt`, que es una
+       * marca de cada dispositivo: al entrar en el móvil con una cuenta ya
+       * registrada volvía a pedirla aunque los datos estuvieran en el servidor.
+       */
+      !farm || survey ? (
         <Onboarding
           key={user.id + (survey ? '-edit' : '-new')}
           user={user}

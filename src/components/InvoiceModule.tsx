@@ -32,14 +32,21 @@ export function InvoiceModule() {
   const [type, setType] = useState(''),
     [category, setCategory] = useState(''),
     [from, setFrom] = useState(''),
-    [to, setTo] = useState('');
+    [to, setTo] = useState(''),
+    [busqueda, setBusqueda] = useState('');
   const categories = CATEGORIAS.filter(c => hasMilk(farm) || c !== 'Venta Leche');
+  /* Sin acentos ni mayúsculas: nadie escribe «Alimentación» con tilde en el
+   * buscador, y el proveedor suele estar guardado en mayúsculas. */
+  const normalizar = (t: string) =>
+    t.normalize('NFD').replace(new RegExp('[\u0300-\u036f]', 'g'), '').toLocaleLowerCase('es');
+  const aguja = normalizar(busqueda.trim());
   const filtered = data.invoices.filter(
     i =>
       (!type || i.tipo === type) &&
       (!category || i.categoria === category) &&
       (!from || i.fecha >= from) &&
-      (!to || i.fecha <= to)
+      (!to || i.fecha <= to) &&
+      (!aguja || normalizar(`${i.titulo} ${i.proveedorOCliente} ${i.notas ?? ''}`).includes(aguja))
   );
   const expenses = filtered
       .filter(i => i.tipo === 'Compra / Gasto')
@@ -79,38 +86,48 @@ export function InvoiceModule() {
             <StatTile label="Gastos del periodo" value={euro(expenses)} />
             <StatTile label="Balance del periodo" value={euro(income - expenses)} />
           </div>
-          <Card className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Field label="Tipo">
-              <Select value={type} onChange={e => setType(e.target.value)}>
-                <option value="">Todos</option>
-                <option value="Compra / Gasto">Gastos</option>
-                <option value="Venta">Ingresos</option>
-              </Select>
-            </Field>
-            <Field label="Categoría">
-              <Select value={category} onChange={e => setCategory(e.target.value)}>
-                <option value="">Todas</option>
-                {categories.map(c => (
-                  <option key={c}>{c}</option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Desde">
-              <Input type="date" value={from} onChange={e => setFrom(e.target.value)} />
-            </Field>
-            <Field
-              label="Hasta"
-              error={
-                from && to && to < from ? 'La fecha final es anterior a la inicial.' : undefined
-              }
-            >
+          <Card className="space-y-4">
+            <Field label="Buscar por concepto o proveedor">
               <Input
-                type="date"
-                value={to}
-                min={from || undefined}
-                onChange={e => setTo(e.target.value)}
+                type="search"
+                value={busqueda}
+                onChange={e => setBusqueda(e.target.value)}
+                placeholder="Pienso, gasóleo, el nombre de la cooperativa..."
               />
             </Field>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Field label="Tipo">
+                <Select value={type} onChange={e => setType(e.target.value)}>
+                  <option value="">Todos</option>
+                  <option value="Compra / Gasto">Gastos</option>
+                  <option value="Venta">Ingresos</option>
+                </Select>
+              </Field>
+              <Field label="Categoría">
+                <Select value={category} onChange={e => setCategory(e.target.value)}>
+                  <option value="">Todas</option>
+                  {categories.map(c => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Desde">
+                <Input type="date" value={from} onChange={e => setFrom(e.target.value)} />
+              </Field>
+              <Field
+                label="Hasta"
+                error={
+                  from && to && to < from ? 'La fecha final es anterior a la inicial.' : undefined
+                }
+              >
+                <Input
+                  type="date"
+                  value={to}
+                  min={from || undefined}
+                  onChange={e => setTo(e.target.value)}
+                />
+              </Field>
+            </div>
           </Card>
           {!filtered.length ? (
             <Card>
@@ -246,6 +263,16 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
     [image, setImage] = useState<string | undefined>(),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
+  /*
+   * Leer y tirar.
+   *
+   * Lo que da valor al registro son las cifras, no la foto: una imagen ocupa
+   * diez mil veces más que los cuatro datos que contiene, y el archivo legal de
+   * la factura lo lleva el gestor del ganadero, no esta aplicación. Así que por
+   * defecto el justificante se usa para leerlo y se descarta al guardar. Quien
+   * lo quiera conservar lo pide marcando la casilla.
+   */
+  const [guardarJustificante, setGuardarJustificante] = useState(false);
   const [leyendo, setLeyendo] = useState(''),
     [lectura, setLectura] = useState(''),
     /* Lo último que propuso la lectura. Sirve para distinguir un concepto que
@@ -323,7 +350,7 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
       proveedorOCliente: party.trim(),
       importeTotalEuro: Number(amount),
       categoria: category,
-      imagenUrl: image,
+      imagenUrl: guardarJustificante ? image : undefined,
       notas: notes.trim()
     };
     update(d => ({ ...d, invoices: [row, ...d.invoices] }));
@@ -372,8 +399,8 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
           <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
         </Field>
         <Field
-          label="Adjuntar justificante"
-          help="Foto (JPEG, PNG o WebP) o PDF, hasta 2 MB. Las fotos se reducen a 1280 px; el PDF se guarda tal cual."
+          label="Leer los datos de una factura"
+          help="Elige el PDF que te ha llegado por correo o una foto del papel. Chaparra rellena el formulario y tú lo revisas. La imagen no se guarda salvo que lo pidas abajo."
         >
           <Input
             type="file"
@@ -384,7 +411,7 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
             }}
           />
         </Field>
-        <Field label="Tomar foto con la cámara">
+        <Field label="O hacerle una foto ahora">
           <Input
             type="file"
             accept="image/jpeg,image/png,image/webp"
@@ -437,6 +464,21 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
                 Quitar justificante
               </Button>
             </div>
+            <label className="flex items-start gap-3 text-sm leading-relaxed text-stone-600">
+              <input
+                type="checkbox"
+                className="mt-1 h-5 w-5 shrink-0 accent-brand-700"
+                checked={guardarJustificante}
+                onChange={e => setGuardarJustificante(e.target.checked)}
+              />
+              <span>
+                Guardar también el justificante con el registro.
+                <span className="block text-xs">
+                  Ocupa mucho y casi nunca se vuelve a mirar. Si no lo marcas, se usa solo para
+                  rellenar el formulario y no se guarda.
+                </span>
+              </span>
+            </label>
             {leyendo && (
               <p role="status" className="text-sm text-stone-600">
                 {leyendo} La primera vez que se lee una foto hay que descargar el lector; tarda un

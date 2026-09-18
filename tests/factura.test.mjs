@@ -56,9 +56,16 @@ test('coge el importe de la línea siguiente cuando el total va solo en su fila'
   assert.equal(s.importeTotalEuro, 347.2);
 });
 
-test('sin palabra clave se queda con la cantidad mayor', () => {
+test('sin una palabra que diga «total» no se propone importe', () => {
+  /*
+   * Antes se cogía la cantidad más alta. Con facturas de verdad eso falla: si
+   * el lector se come la palabra TOTAL, la mayor pasa a ser una línea de
+   * artículo o la base imponible, y se propone un número equivocado con toda la
+   * pinta de ser bueno. Mejor que lo teclee la persona.
+   */
   const s = interpretarFactura(`Vacunación 40,00\nDesplazamiento 15,00\n55,00`, HOY);
-  assert.equal(s.importeTotalEuro, 55);
+  assert.equal(s.importeTotalEuro, undefined);
+  assert.ok(!s.encontrados.includes('el importe'));
 });
 
 test('prefiere la fecha de emisión y descarta la de vencimiento', () => {
@@ -133,7 +140,12 @@ test('enumera lo que ha encontrado para poder decir qué falta', () => {
     'PIENSOS DEL TAJO S.L.\nFecha: 12/09/2026\nTOTAL A PAGAR 825,00',
     HOY
   );
-  assert.deepEqual(completa.encontrados, ['el importe', 'la fecha', 'el proveedor', 'la categoría']);
+  assert.deepEqual(completa.encontrados, [
+    'el importe',
+    'la fecha',
+    'el proveedor',
+    'la categoría'
+  ]);
   const suelta = interpretarFactura('TOTAL 30,00', HOY);
   assert.ok(suelta.encontrados.includes('el importe'));
   assert.ok(!suelta.encontrados.includes('la fecha'));
@@ -142,4 +154,12 @@ test('enumera lo que ha encontrado para poder decir qué falta', () => {
 test('dos lecturas seguidas dan el mismo resultado', () => {
   const texto = 'GANADERA DEL OESTE S.L.\nCIF B45999888\nFecha: 01/07/2026\nTOTAL 120,00';
   assert.deepEqual(interpretarFactura(texto, HOY), interpretarFactura(texto, HOY));
+});
+
+test('los puntos de millar sin coma no se confunden con decimales', () => {
+  // «1.451» son mil cuatrocientos cincuenta y uno; «89.90», ochenta y nueve noventa.
+  assert.equal(numeroEspanol('1.451'), 1451);
+  assert.equal(numeroEspanol('1.284.500'), 1284500);
+  assert.equal(numeroEspanol('89.90'), 89.9);
+  assert.equal(numeroEspanol('1.234,56'), 1234.56);
 });

@@ -21,6 +21,12 @@ export type Progreso = (paso: string) => void;
 const MAX_PAGINAS = 5;
 /** Con menos texto que esto, el PDF es un escaneo: hay que pasarlo por el lector. */
 const MINIMO_TEXTO = 40;
+/*
+ * Por debajo de esta confianza del lector no se propone nada. Tesseract la da
+ * de 0 a 100 y con una foto legible ronda el 90; cuando baja de aquí, lo que
+ * devuelve ya no son erratas sueltas sino cifras distintas de las del papel.
+ */
+const CONFIANZA_MINIMA = 70;
 /** Ancho al que se rasteriza un PDF escaneado: por debajo, el lector no acierta. */
 const ANCHO_OCR = 2000;
 
@@ -144,6 +150,18 @@ async function leerConTesseract(fuente: Blob, avisar: Progreso): Promise<string>
   });
   try {
     const { data } = await worker.recognize(fuente);
+    /*
+     * Una foto mala no se queda a medias: inventa. En las pruebas, una imagen
+     * pequeña, movida y con poco contraste devolvió 0,33 € donde ponía 674,43,
+     * y 6,22 donde ponía 6.229,83. Un importe equivocado que parece verosímil
+     * es mucho peor que ninguno, porque se cuela en las cuentas sin que nadie
+     * lo note. Por debajo de este listón se prefiere no proponer nada.
+     */
+    if (data.confidence < CONFIANZA_MINIMA)
+      throw new Error(
+        'La foto no se lee con garantías: sale muy movida o con poca luz. Haz otra con más luz y ' +
+          'el papel plano, o escribe los datos a mano.'
+      );
     return data.text;
   } finally {
     await worker.terminate();

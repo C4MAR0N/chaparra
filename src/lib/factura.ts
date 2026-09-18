@@ -35,8 +35,16 @@ export function numeroEspanol(bruto: string): number | null {
   if (!/\d/.test(limpio)) return null;
   const coma = limpio.lastIndexOf(','),
     punto = limpio.lastIndexOf('.');
-  const normal =
-    coma > punto
+  /*
+   * Puntos sin coma y en grupos de tres exactos: son miles, no decimales.
+   * «1.451 €» son mil cuatrocientos cincuenta y uno; leerlo como 1,451
+   * convertía una factura de mil euros en una de uno, y el gasto del año se
+   * quedaba en nada sin que saltara ningún aviso.
+   */
+  const milesConPunto = coma < 0 && new RegExp('^-?\\d{1,3}(\\.\\d{3})+$').test(limpio);
+  const normal = milesConPunto
+    ? limpio.replace(/\./g, '')
+    : coma > punto
       ? limpio.replace(/\./g, '').replace(',', '.')
       : punto > coma
         ? limpio.replace(/,/g, '')
@@ -45,10 +53,23 @@ export function numeroEspanol(bruto: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/* Un número solo cuenta como dinero si lleva dos decimales o el símbolo del
- * euro. Sin eso, el «21» de «IVA 21%» pasaría por un importe. */
+/*
+ * Un número solo cuenta como dinero si lleva dos decimales o el símbolo del
+ * euro. Sin eso, el «21» de «IVA 21%» pasaría por un importe.
+ *
+ * El espacio NO vale como separador de miles, aunque algún programa lo use. En
+ * una factura de verdad las líneas de artículo son «Producto 1 2 100 200,00»,
+ * y admitiéndolo se leía «100 200,00» como cien mil doscientos euros: en una
+ * factura de prueba llegó a proponer 4.150.600 €.
+ *
+ * La segunda alternativa es para «1.451 €»: miles con punto y sin decimales.
+ * Solo se acepta con el euro pegado, porque «1.451» a secas podría ser
+ * cualquier cosa, empezando por un número de factura.
+ */
 const IMPORTE = new RegExp(
-  '(?:€\\s*)?-?\\d{1,3}(?:\\.\\d{3})+,\\d{2}|(?:€\\s*)?-?\\d+[.,]\\d{2}(?:\\s*€)?|€\\s*-?\\d+',
+  '(?:€\\s*)?-?\\d{1,3}(?:\\.\\d{3})+,\\d{2}|' +
+    '(?:€\\s*)?-?\\d{1,3}(?:\\.\\d{3})+\\s*€|' +
+    '(?:€\\s*)?-?\\d+[.,]\\d{2}(?:\\s*€)?|€\\s*-?\\d+',
   'g'
 );
 
@@ -67,20 +88,36 @@ const CLAVES_IMPORTE: RegExp[] = [
 ];
 
 function buscarImporte(lineas: string[]): number | undefined {
+  const todas = lineas.flatMap(importesDe).map(Math.abs);
+  const maximo = todas.length ? Math.max(...todas) : 0;
+  /*
+   * El total de una factura no puede ser menor que su base ni que ninguna de
+   * sus líneas: es la suma de todas. Si lo que hay junto a «TOTAL» sale menor
+   * que la mayor cantidad del papel, la lectura está rota y es mejor no
+   * proponer nada. Sin esta comprobación, una foto movida leyó «1.404,70» como
+   * «1,40» y lo daba por bueno porque estaba en la línea correcta.
+   */
+  const coherente = (valor: number) => (valor >= maximo ? valor : undefined);
   for (const clave of CLAVES_IMPORTE) {
     for (let i = lineas.length - 1; i >= 0; i--) {
       if (!clave.test(lineas[i])) continue;
       // El importe suele ir en la misma línea; si no, en la siguiente.
       const aqui = importesDe(lineas[i]);
-      if (aqui.length) return Math.abs(aqui[aqui.length - 1]);
+      if (aqui.length) return coherente(Math.abs(aqui[aqui.length - 1]));
       const siguiente = importesDe(lineas[i + 1] ?? '');
-      if (siguiente.length) return Math.abs(siguiente[0]);
+      if (siguiente.length) return coherente(Math.abs(siguiente[0]));
     }
   }
-  // Sin ninguna palabra clave, el total de una factura es casi siempre la
-  // cantidad más alta que aparece en ella.
-  const todos = lineas.flatMap(importesDe).map(Math.abs);
-  return todos.length ? Math.max(...todos) : undefined;
+  /*
+   * Sin ninguna palabra que diga «total», no se propone importe.
+   *
+   * Antes se cogía la cantidad más alta del documento. Con facturas de verdad
+   * eso falla: si el lector se come la palabra «TOTAL», la mayor pasa a ser una
+   * línea de artículo o la base imponible, y se propone un número equivocado
+   * con toda la apariencia de ser bueno. Mejor que el ganadero teclee el
+   * importe y que el resto de campos le vengan dados.
+   */
+  return undefined;
 }
 
 const MESES = [
@@ -109,6 +146,13 @@ function fechaValida(dia: number, mes: number, ano: number, hoy: string): string
 
 function fechasDe(texto: string, hoy: string): string[] {
   const salida: string[] = [];
+  /* AAAA-MM-DD: es lo que escriben los programas de facturación, así que llega
+   * en casi todos los PDF de una empresa con la contabilidad informatizada. */
+  const internacional = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
+  for (const m of texto.matchAll(internacional)) {
+    const iso = fechaValida(Number(m[3]), Number(m[2]), Number(m[1]), hoy);
+    if (iso) salida.push(iso);
+  }
   const numerica = /\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\b/g;
   for (const m of texto.matchAll(numerica)) {
     const ano = Number(m[3].length === 2 ? '20' + m[3] : m[3]);
@@ -146,14 +190,22 @@ const NIF = new RegExp(PATRON_NIF, 'g');
 const ES_NIF = new RegExp(PATRON_NIF);
 
 const RUIDO =
-  /^(factura|albar[aá]n|ticket|recibo|n[ºo°]|num|cliente|fecha|p[aá]gina|original|copia|iva|base|total|importe|direcci[oó]n|tel[eé]fono|email|c\.?i\.?f|n\.?i\.?f)\b/i;
+  /^(factura|albar[aá]n|ticket|recibo|n[ºo°]|num(?:ero)?|cliente|fecha|p[aá]gina|original|copia|iva|base|total|importe|direcci[oó]n|tel[eé]fono|email|c\.?i\.?f|n\.?i\.?f)\b/i;
 const SOCIEDAD =
   /\b(s\.?\s?l\.?u?|s\.?\s?a\.?|s\.?\s?c\.?|s\.?\s?coop|sociedad|cooperativa|coop)\b/i;
 
 function buscarProveedor(lineas: string[]): string | undefined {
   const limpia = (t: string) => t.replace(/\s+/g, ' ').trim();
+  /* Sin tildes para el descarte: «Número de factura» tiene que caer igual que
+   * «Numero de factura», y el lector pone la tilde cuando le parece. */
+  const sinTildes = (t: string) =>
+    t.normalize('NFD').replace(new RegExp('[\u0300-\u036f]', 'g'), '');
   const util = (t: string) =>
-    t.length >= 4 && t.length <= 70 && /[a-zá-úñ]/i.test(t) && !RUIDO.test(t) && !ES_NIF.test(t);
+    t.length >= 4 &&
+    t.length <= 70 &&
+    /[a-zá-úñ]/i.test(t) &&
+    !RUIDO.test(sinTildes(t)) &&
+    !ES_NIF.test(t);
 
   // El nombre con forma de sociedad es el más fiable, lo pongan donde lo pongan.
   const sociedad = lineas.map(limpia).find(t => util(t) && SOCIEDAD.test(t));

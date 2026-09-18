@@ -193,14 +193,19 @@ export function AnimalDetailModal({
         <p className="text-sm font-semibold text-stone-600">Crías:</p>
         {crias.length ? (
           <div className="flex flex-wrap gap-2">
+            {/* Con la fecha al lado, la lista de crías se lee como el historial
+                de partos de la madre y no como un montón de crotales sueltos. */}
             {crias.map(cria => (
               <Button
                 key={cria.id}
                 variant="secondary"
-                className="tracking-tight"
+                className="flex-col items-start gap-0 py-2 tracking-tight"
                 onClick={() => onSelect(cria.id)}
               >
                 {cria.crotal}
+                <span className="text-xs font-normal text-stone-600">
+                  {cria.fechaNacimiento ? dateLabel(cria.fechaNacimiento) : 'Sin fecha'}
+                </span>
               </Button>
             ))}
           </div>

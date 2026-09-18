@@ -6,6 +6,7 @@ import {
   animalMeat,
   aplicarMadre,
   criasDe,
+  dateLabel,
   esDescendiente,
   hasMeat,
   hasMilk,
@@ -384,7 +385,13 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
               options={data.animals
                 .filter(a => a.id !== draft.id && !draft.criasAsociadas.includes(a.id))
                 .sort((a, b) => a.crotal.localeCompare(b.crotal))
-                .map(a => ({ value: a.id, label: a.crotal, detail: a.raza || undefined }))}
+                .map(a => ({
+                  value: a.id,
+                  label: a.crotal,
+                  detail: [a.fechaNacimiento ? dateLabel(a.fechaNacimiento) : null, a.raza]
+                    .filter(Boolean)
+                    .join(' · ')
+                }))}
             />
           </Field>
           <Button
@@ -402,7 +409,14 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
               key={cria.id}
               className="flex flex-wrap items-center justify-between gap-2 text-sm"
             >
-              <span className="font-semibold tracking-tight">{cria.crotal}</span>
+              <span className="font-semibold tracking-tight">
+                {cria.crotal}
+                {/* La fecha al lado: así la lista se lee como el historial de
+                    partos de la madre, en vez de como crotales sueltos. */}
+                <span className="ml-2 font-normal text-stone-600">
+                  {cria.fechaNacimiento ? dateLabel(cria.fechaNacimiento) : 'Sin fecha'}
+                </span>
+              </span>
               <Button
                 variant="ghost"
                 onClick={() =>

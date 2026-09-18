@@ -9,13 +9,13 @@ import {
   Search,
   Tag
 } from 'lucide-react';
-import type { Animal } from '../types';
+import type { Animal, CategoriaAnimal, Especie } from '../types';
 import { useFarm } from '../context/FarmContext';
-import { ESPECIES, ESTADOS, especieLabel } from '../lib/constants';
+import { CATEGORIAS_ANIMAL, ESTADOS, especieLabel } from '../lib/constants';
 import {
   age,
   edadTexto,
-  herdLabel,
+  esActivo,
   necesitaAtencion,
   porUbicacion,
   ubicacionDe
@@ -30,15 +30,49 @@ import { AnimalDetailModal } from './AnimalDetailModal';
  * de verdad se busca algo. */
 const VISIBLES_SIN_FILTRO = 5;
 
-export function CrotalList() {
-  const { data, farm, user, notify } = useFarm();
-  const animals = data.animals;
+/*
+ * Muchos ganaderos llegan con los datos en otro sitio: un cuaderno de papel,
+ * otra aplicación, un Excel suelto. El correo sale con el asunto y el cuerpo
+ * ya escritos, con huecos para que solo tengan que rellenar los suyos y
+ * enviar.
+ */
+const ASUNTO_MIGRACION = 'Ayuda para pasar mis datos a Chaparra';
+const CUERPO_MIGRACION = [
+  'Hola,',
+  '',
+  'Quiero pasar los datos de mi explotación a Chaparra. ¿Me echáis un vistazo antes de meterlos?',
+  '',
+  'Nombre de la explotación: ',
+  'Cuántos animales tengo: ',
+  'En qué formato tengo la lista ahora (papel, Excel, otra aplicación...): ',
+  '',
+  'Gracias.'
+].join('\r\n');
+const MAILTO_MIGRACION = `mailto:chaparra@agrovanza.es?subject=${encodeURIComponent(ASUNTO_MIGRACION)}&body=${encodeURIComponent(CUERPO_MIGRACION)}`;
+
+/*
+ * herdLabel (en domain.ts) dice «rebaño» o «ganado» mirando toda la
+ * explotación. Aquí la pantalla ya está acotada a una especie por la pestaña,
+ * así que hace falta un rótulo por especie: se resuelve aparte, sin tocar
+ * domain.ts, que está editando otro cambio en curso.
+ */
+const adjetivoEspecie = (especie: Especie) =>
+  especie === 'Otro' ? '' : ` ${especieLabel(especie).toLowerCase()}`;
+const colectivoEspecie = (especie: Especie) =>
+  (especie === 'Ovino' || especie === 'Caprino' ? 'rebaño' : 'ganado') + adjetivoEspecie(especie);
+const unAnimalDe = (especie: Especie) => `un animal${adjetivoEspecie(especie)}`;
+
+export function CrotalList({ especie }: { especie: Especie }) {
+  const { data, user, notify } = useFarm();
+  const animals = useMemo(
+    () => data.animals.filter(a => a.especie === especie),
+    [data.animals, especie]
+  );
   const [search, setSearch] = useState(''),
-    [species, setSpecies] = useState(''),
     [health, setHealth] = useState(''),
     [sex, setSex] = useState(''),
     [ubicacion, setUbicacion] = useState(''),
-    [active, setActive] = useState('active'),
+    [situacion, setSituacion] = useState<CategoriaAnimal | 'todos'>('Activo'),
     [sort, setSort] = useState('crotal');
   const [selectedId, setSelectedId] = useState<string | null>(null),
     [editing, setEditing] = useState<Animal | 'new' | null>(null),
@@ -60,12 +94,11 @@ export function CrotalList() {
               [a.crotal, a.raza, a.ubicacion].some(s =>
                 s.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es'))
               )) &&
-            (!species || a.especie === species) &&
             (!health ||
               (health === 'atencion' ? necesitaAtencion(a) : a.estadoSanitario === health)) &&
             (!sex || a.sexo === sex) &&
             (!ubicacion || ubicacionDe(a) === ubicacion) &&
-            (active === 'all' || a.activo === (active === 'active'))
+            (situacion === 'todos' || a.categoria === situacion)
         )
         .sort((a, b) =>
           sort === 'age'
@@ -74,19 +107,17 @@ export function CrotalList() {
               ? (b.fechaUltimoControl ?? '').localeCompare(a.fechaUltimoControl ?? '')
               : a.crotal.localeCompare(b.crotal, 'es', { numeric: true })
         ),
-    [animals, search, species, health, sex, ubicacion, active, sort]
+    [animals, search, health, sex, ubicacion, situacion, sort]
   );
-  const hayFiltros =
-    Boolean(search || species || health || sex || ubicacion) || active !== 'active';
+  const hayFiltros = Boolean(search || health || sex || ubicacion) || situacion !== 'Activo';
   const visibles = hayFiltros || verTodos ? filtered : filtered.slice(0, VISIBLES_SIN_FILTRO);
   const ocultos = filtered.length - visibles.length;
   const reset = () => {
     setSearch('');
-    setSpecies('');
     setHealth('');
     setSex('');
     setUbicacion('');
-    setActive('active');
+    setSituacion('Activo');
     setVerTodos(false);
   };
   /* Llevar la vista al listado: un filtro que cambia una lista que no se ve es
@@ -104,8 +135,7 @@ export function CrotalList() {
    * archivo sale a nombre de la manada, que es como lo va a pedir el veterinario.
    */
   function exportar() {
-    const soloUbicacion =
-      ubicacion && !search && !species && !health && !sex && active === 'active';
+    const soloUbicacion = ubicacion && !search && !health && !sex && situacion === 'Activo';
     try {
       descargarExcel(
         user,
@@ -129,22 +159,18 @@ export function CrotalList() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="page-heading">Tu {herdLabel(farm)}</h1>
+          <h1 className="page-heading">Tu {colectivoEspecie(especie)}</h1>
           <p className="mt-2 text-sm text-stone-600">
             Identificación, sanidad e historial de cada animal.
           </p>
         </div>
         <Button onClick={() => setEditing('new')}>
           <Plus size={20} />
-          Dar de alta
+          Dar de alta {unAnimalDe(especie)}
         </Button>
       </div>
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        <StatTile
-          label="Animales activos"
-          value={animals.filter(a => a.activo).length}
-          icon={Tag}
-        />
+        <StatTile label="Animales activos" value={animals.filter(esActivo).length} icon={Tag} />
         <StatTile
           label="Necesitan atención"
           value={animals.filter(necesitaAtencion).length}
@@ -199,12 +225,12 @@ export function CrotalList() {
         <Card>
           <EmptyState
             icon={Tag}
-            title="Tu explotación empieza aquí"
-            description="Todavía no has registrado animales. Añade el primero para guardar su crotal, ubicación e historial."
+            title={`Tu ${colectivoEspecie(especie)} empieza aquí`}
+            description={`Todavía no has registrado ningún animal${adjetivoEspecie(especie)}. Añade el primero para guardar su crotal, ubicación e historial.`}
             action={
               <Button onClick={() => setEditing('new')}>
                 <Plus size={20} />
-                Dar de alta el primer animal
+                Dar de alta el primer animal{adjetivoEspecie(especie)}
               </Button>
             }
           />
@@ -220,25 +246,13 @@ export function CrotalList() {
                 placeholder="Escribe un crotal, una raza o un cercado"
               />
             </Field>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
               <Field label="Ubicación">
                 <Select value={ubicacion} onChange={e => setUbicacion(e.target.value)}>
                   <option value="">Todas</option>
                   {ubicaciones.map(u => (
                     <option key={u} value={u}>
                       {u}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Especie">
-                <Select value={species} onChange={e => setSpecies(e.target.value)}>
-                  <option value="">Todas</option>
-                  {ESPECIES.filter(
-                    s => animals.some(a => a.especie === s) || farm.especies.includes(s)
-                  ).map(s => (
-                    <option key={s} value={s}>
-                      {especieLabel(s)}
                     </option>
                   ))}
                 </Select>
@@ -260,10 +274,17 @@ export function CrotalList() {
                 </Select>
               </Field>
               <Field label="Situación">
-                <Select value={active} onChange={e => setActive(e.target.value)}>
-                  <option value="active">Activos</option>
-                  <option value="inactive">De baja</option>
-                  <option value="all">Todos</option>
+                <Select
+                  value={situacion}
+                  onChange={e => setSituacion(e.target.value as CategoriaAnimal | 'todos')}
+                >
+                  <option value="Activo">Activos</option>
+                  {CATEGORIAS_ANIMAL.filter(c => c !== 'Activo').map(c => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  <option value="todos">Todos</option>
                 </Select>
               </Field>
               <Field label="Ordenar por">
@@ -327,7 +348,7 @@ export function CrotalList() {
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge>{a.estadoSanitario}</Badge>
-                      {!a.activo && <Badge>De baja</Badge>}
+                      {!esActivo(a) && <Badge>{a.categoria}</Badge>}
                     </div>
                     <p className="mt-3 flex items-center gap-2 text-sm text-stone-600">
                       <MapPin size={16} />
@@ -361,7 +382,7 @@ export function CrotalList() {
                           <p className="text-xs text-stone-600">
                             {especieLabel(a.especie)} · {a.raza || 'Sin raza'}
                           </p>
-                          {!a.activo && <Badge>De baja</Badge>}
+                          {!esActivo(a) && <Badge>{a.categoria}</Badge>}
                         </td>
                         <td>
                           {age(a.fechaNacimiento)}
@@ -391,6 +412,16 @@ export function CrotalList() {
           )}
         </>
       )}
+      <Card className="space-y-2">
+        <h2 className="section-heading">¿Tienes los datos de tu explotación en otro sitio?</h2>
+        <p className="text-sm leading-relaxed text-stone-600">
+          ¿No sabes cómo meterlos aquí? Nosotros te ayudamos: escríbenos a{' '}
+          <a href={MAILTO_MIGRACION} className="font-semibold text-brand-700 underline">
+            chaparra@agrovanza.es
+          </a>{' '}
+          y le echamos un vistazo.
+        </p>
+      </Card>
       {editing && (
         <AnimalFormModal
           initial={editing === 'new' ? undefined : editing}

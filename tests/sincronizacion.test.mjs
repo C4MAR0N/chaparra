@@ -189,3 +189,39 @@ test('un registro que vuelve tras un borrado se marca como cambio', async () => 
   const metas = marcarCambios(VACIA, despues, previas);
   assert.ok(!metas[clave('animal', 'a1')].borrado, 'debe dejar de estar borrado');
 });
+
+test('un animal que baja del servidor con el formato antiguo llega migrado', () => {
+  /*
+   * El caso real: una cuenta con 235 vacas guardadas antes de que existieran
+   * las categorías, abierta en un móvil recién estrenado. Lo que baja no pasa
+   * por la validación, así que si no se migra aquí la lista sale vacía.
+   */
+  const viejo = reg('animal', 'a1', { id: 'a1', crotal: 'ES1', activo: true }, t(5));
+  const vendido = reg(
+    'animal',
+    'a2',
+    { id: 'a2', crotal: 'ES2', activo: false, motivoBaja: 'Vendido' },
+    t(6)
+  );
+  const sacrificado = reg(
+    'animal',
+    'a3',
+    { id: 'a3', crotal: 'ES3', activo: false, motivoBaja: 'Sacrificado' },
+    t(7)
+  );
+  const data = reconstruir([viejo, vendido, sacrificado], VACIA);
+  assert.deepEqual(
+    data.animals.map(a => a.categoria),
+    ['Activo', 'Vendido', 'Muerto']
+  );
+  assert.ok(
+    data.animals.every(a => !('activo' in a) && !('motivoBaja' in a)),
+    'los campos antiguos no deben seguir viajando'
+  );
+});
+
+test('un animal que ya trae categoría no se toca al reconstruir', () => {
+  const nuevo = { id: 'a1', crotal: 'ES1', categoria: 'Muerto' };
+  const data = reconstruir([reg('animal', 'a1', nuevo, t(5))], VACIA);
+  assert.equal(data.animals[0].categoria, 'Muerto');
+});

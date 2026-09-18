@@ -21,7 +21,7 @@ const animal = (id, extra = {}) => ({
   estadoSanitario: 'Sano',
   raza: '',
   sexo: 'Hembra',
-  activo: true,
+  categoria: 'Activo',
   fechaAlta: '2020-01-01',
   historialSanitario: [],
   ...extra
@@ -46,7 +46,7 @@ test('reparte el ganado por ubicación y calcula la edad media de cada manada', 
 });
 
 test('las bajas no cuentan en el reparto por ubicación', () => {
-  const animales = [animal('a'), animal('b', { activo: false })];
+  const animales = [animal('a'), animal('b', { categoria: 'Vendido', fechaBaja: '2021-01-01' })];
   assert.deepEqual(
     porUbicacion(animales, '2026-01-01').map(m => m.total),
     [1]
@@ -102,7 +102,13 @@ test('necesitan atención los animales activos en tratamiento, cuarentena u obse
   assert.equal(necesitaAtencion(animal('d', { estadoSanitario: 'Vacunado' })), false);
   assert.equal(necesitaAtencion(animal('e', { estadoSanitario: 'Sano' })), false);
   assert.equal(
-    necesitaAtencion(animal('f', { estadoSanitario: 'En tratamiento', activo: false })),
+    necesitaAtencion(
+      animal('f', {
+        estadoSanitario: 'En tratamiento',
+        categoria: 'Muerto',
+        fechaBaja: '2021-01-01'
+      })
+    ),
     false,
     'un animal de baja ya no pide visita'
   );

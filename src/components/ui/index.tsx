@@ -21,6 +21,8 @@ import {
   type LucideIcon
 } from 'lucide-react';
 export { Modal, ConfirmModal } from './Modal';
+export { ComboBox } from './ComboBox';
+export type { ComboBoxOption } from './ComboBox';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';

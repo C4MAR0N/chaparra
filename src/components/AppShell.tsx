@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
   ClipboardList,
   CloudOff,
+  CloudRain,
   RefreshCw,
   HardDrive,
   Leaf,
@@ -13,21 +14,23 @@ import {
   Settings,
   TrendingUp
 } from 'lucide-react';
-import type { UserRecord } from '../types';
+import type { Especie, UserRecord } from '../types';
 import { useFarm } from '../context/FarmContext';
-import { Banner, Button } from './ui';
+import { especieLabel } from '../lib/constants';
+import { Banner, Button, SegmentedControl } from './ui';
 import { CrotalList } from './CrotalList';
 import { ProductionModule } from './ProductionModule';
 import { InvoiceModule } from './InvoiceModule';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { FarmSettingsModal } from './FarmSettingsModal';
 import { Tiempo } from './Tiempo';
-type Tab = 'herd' | 'production' | 'invoices' | 'reports';
+type Tab = 'herd' | 'production' | 'invoices' | 'reports' | 'weather';
 const pestañasPorEnlace: Record<string, Tab> = {
   rebano: 'herd',
   produccion: 'production',
   facturas: 'invoices',
-  informes: 'reports'
+  informes: 'reports',
+  tiempo: 'weather'
 };
 
 function pestañaInicial(): Tab {
@@ -36,13 +39,6 @@ function pestañaInicial(): Tab {
   const seccion = new URLSearchParams(window.location.search).get('seccion');
   return (seccion && pestañasPorEnlace[seccion]) || 'herd';
 }
-
-const tabs: { id: Tab; label: string; icon: typeof Leaf }[] = [
-  { id: 'herd', label: 'Rebaño', icon: ClipboardList },
-  { id: 'production', label: 'Producción', icon: TrendingUp },
-  { id: 'invoices', label: 'Facturas', icon: Receipt },
-  { id: 'reports', label: 'Informes', icon: BarChart3 }
-];
 export function AppShell({
   onLogout,
   onSurvey,
@@ -79,6 +75,25 @@ export function AppShell({
   }[estadoNube];
   const [tab, setTab] = useState<Tab>(pestañaInicial),
     [settings, setSettings] = useState(false);
+  /* Con una sola especie la pantalla del ganado no necesita pestañas propias:
+   * la especie elegida es siempre esa. Con varias, se recuerda cuál se está
+   * mirando para pasársela a CrotalList. */
+  const [especieTab, setEspecieTab] = useState<Especie>(farm.especies[0]);
+  useEffect(() => {
+    if (!farm.especies.includes(especieTab)) setEspecieTab(farm.especies[0]);
+  }, [farm.especies, especieTab]);
+  const especieUnica = farm.especies.length === 1 ? farm.especies[0] : null;
+  const tabs: { id: Tab; label: string; icon: typeof Leaf }[] = [
+    {
+      id: 'herd',
+      label: especieUnica ? especieLabel(especieUnica) : 'Ganado',
+      icon: ClipboardList
+    },
+    { id: 'production', label: 'Producción', icon: TrendingUp },
+    { id: 'invoices', label: 'Facturas', icon: Receipt },
+    { id: 'reports', label: 'Informes', icon: BarChart3 },
+    { id: 'weather', label: 'Tiempo', icon: CloudRain }
+  ];
   const nav = (mobile: boolean) =>
     tabs.map(({ id, label, icon: Icon }) => (
       <button
@@ -176,14 +191,21 @@ export function AppShell({
           {notice && <Banner tone="success">{notice}</Banner>}
           {tab === 'herd' && (
             <>
-              <CrotalList />
-              {/* El tiempo, debajo de la pantalla principal: en el campo la lluvia manda. */}
-              <Tiempo />
+              {!especieUnica && (
+                <SegmentedControl
+                  label="Especie"
+                  options={farm.especies.map(e => ({ value: e, label: especieLabel(e) }))}
+                  value={especieTab}
+                  onChange={setEspecieTab}
+                />
+              )}
+              <CrotalList especie={especieUnica ?? especieTab} />
             </>
           )}
           {tab === 'production' && <ProductionModule onAnimals={() => setTab('herd')} />}
           {tab === 'invoices' && <InvoiceModule />}
           {tab === 'reports' && <AnalyticsDashboard />}
+          {tab === 'weather' && <Tiempo />}
         </main>
       </div>
       <nav

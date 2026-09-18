@@ -1,4 +1,5 @@
 import type { FarmData } from '../types';
+import { migrarAnimalGuardado } from '../lib/validation';
 
 /*
  * Sincronización local-first.
@@ -89,7 +90,15 @@ export function reconstruir(registros: Registro[], base: FarmData): FarmData {
   return {
     farm: uno<FarmData['farm']>('explotacion') ?? base.farm,
     saleTemplate: uno<FarmData['saleTemplate']>('plantilla') ?? base.saleTemplate,
-    animals: muchos<FarmData['animals'][number]>('animal'),
+    /*
+     * Lo que baja del servidor no pasa por la validación, que es donde vive la
+     * migración de la ficha antigua. Sin este paso, una cuenta creada antes de
+     * que existieran las categorías se sincronizaría en un dispositivo nuevo y
+     * sus animales entrarían sin categoría: la lista saldría vacía.
+     */
+    animals: muchos<FarmData['animals'][number]>('animal').map(
+      a => migrarAnimalGuardado(a) as FarmData['animals'][number]
+    ),
     invoices: muchos<FarmData['invoices'][number]>('factura'),
     milkRecords: muchos<FarmData['milkRecords'][number]>('ordeno'),
     weightRecords: muchos<FarmData['weightRecords'][number]>('pesada')

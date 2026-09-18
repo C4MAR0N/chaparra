@@ -5,6 +5,7 @@ import {
   animalMeat,
   animalMilk,
   dateLabel,
+  esActivo,
   euro,
   hasMeat,
   hasMilk,
@@ -19,6 +20,7 @@ import type { MilkRecord, WeightRecord } from '../types';
 import {
   Button,
   Card,
+  ComboBox,
   ConfirmModal,
   EmptyState,
   Field,
@@ -69,7 +71,7 @@ function MilkProduction() {
     [notas, setNotas] = useState(''),
     [error, setError] = useState(''),
     [deleting, setDeleting] = useState<MilkRecord | null>(null);
-  const animals = data.animals.filter(a => a.activo && animalMilk(a, farm));
+  const animals = data.animals.filter(a => esActivo(a) && animalMilk(a, farm));
   const series = milkSeries(records, 30);
   const total = records.filter(r => r.fecha === fecha).reduce((sum, r) => sum + r.litros, 0);
   const average = (days: number) =>
@@ -165,20 +167,20 @@ function MilkProduction() {
               label="Animal o conjunto"
               help="Registra un total por ordeño o registros individuales, sin mezclarlos."
             >
-              <Select
+              <ComboBox
                 value={animalId}
-                onChange={e => {
-                  setAnimalId(e.target.value);
-                  defaults(e.target.value, ordeno);
+                onChange={id => {
+                  setAnimalId(id);
+                  defaults(id, ordeno);
                 }}
-              >
-                <option value="">Toda la explotación</option>
-                {animals.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.crotal}
-                  </option>
-                ))}
-              </Select>
+                clearLabel="Toda la explotación"
+                placeholder="Escribe un crotal o una raza"
+                options={animals.map(a => ({
+                  value: a.id,
+                  label: a.crotal,
+                  detail: a.raza || undefined
+                }))}
+              />
             </Field>
             <Field label="Litros" error={error}>
               <Input
@@ -268,7 +270,7 @@ function MilkProduction() {
 }
 function MeatProduction({ onAnimals }: { onAnimals: () => void }) {
   const { data, farm, update, notify } = useFarm();
-  const animals = data.animals.filter(a => a.activo && animalMeat(a, farm));
+  const animals = data.animals.filter(a => esActivo(a) && animalMeat(a, farm));
   const [animalId, setAnimalId] = useState(animals[0]?.id ?? ''),
     [fecha, setFecha] = useState(today()),
     [peso, setPeso] = useState(() => {
@@ -352,21 +354,21 @@ function MeatProduction({ onAnimals }: { onAnimals: () => void }) {
           <h2 className="section-heading">Registrar pesada</h2>
           <form onSubmit={save} className="space-y-4">
             <Field label="Animal">
-              <Select
+              <ComboBox
                 value={selected?.id ?? ''}
-                onChange={e => {
-                  setAnimalId(e.target.value);
-                  const animal = animals.find(a => a.id === e.target.value);
+                onChange={id => {
+                  setAnimalId(id);
+                  const animal = animals.find(a => a.id === id);
                   const last = animal ? weightStats(animal, data.weightRecords).last : null;
                   setPeso(last ? String(last.pesoKg) : '');
                 }}
-              >
-                {animals.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.crotal} · {a.raza}
-                  </option>
-                ))}
-              </Select>
+                placeholder="Escribe un crotal o una raza"
+                options={animals.map(a => ({
+                  value: a.id,
+                  label: a.crotal,
+                  detail: a.raza || undefined
+                }))}
+              />
             </Field>
             <div className="form-grid">
               <Field label="Fecha de pesada">

@@ -9,7 +9,14 @@ import type {
   SaleInvoiceTemplate,
   WeightRecord
 } from '../types';
-import { CATEGORIAS, ESPECIES, ESTADOS, ORIENTACIONES, PROVINCIAS } from './constants';
+import {
+  CATEGORIAS,
+  CATEGORIAS_ANIMAL,
+  ESPECIES,
+  ESTADOS,
+  ORIENTACIONES,
+  PROVINCIAS
+} from './constants';
 import { today } from './domain';
 export const object = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -85,9 +92,36 @@ function isHealth(v: unknown): v is HealthRecord {
     nonnegative(v.costeEuro)
   );
 }
+/*
+ * Hasta esta versión el animal llevaba `activo: boolean` + `motivoBaja`. La
+ * migración vive aquí, en la validación, para que una ficha guardada con el
+ * formato viejo se siga leyendo (235 vacas de un ganadero real dependen de
+ * esto): `activo: true` -> 'Activo'; `motivoBaja: 'Vendido'` -> 'Vendido';
+ * cualquier otra baja (incluida 'Sacrificado') -> 'Muerto'. Si ya trae
+ * `categoria` no se toca: no se pisa un dato ya migrado, ni uno corrupto.
+ */
+/**
+ * Migra una ficha suelta sin tocar el original. La necesita la sincronización:
+ * lo que baja del servidor no pasa por `isAnimal`, así que sin esto una cuenta
+ * con fichas antiguas entraría en la aplicación sin categoría y el ganadero
+ * vería su explotación vacía.
+ */
+export function migrarAnimalGuardado(datos: unknown): unknown {
+  if (!object(datos) || 'categoria' in datos) return datos;
+  const copia = { ...datos };
+  migrarCategoria(copia);
+  return copia;
+}
+function migrarCategoria(v: Record<string, unknown>): void {
+  if ('categoria' in v || typeof v.activo !== 'boolean') return;
+  v.categoria = v.activo ? 'Activo' : v.motivoBaja === 'Vendido' ? 'Vendido' : 'Muerto';
+  delete v.activo;
+  delete v.motivoBaja;
+}
 export function isAnimal(v: unknown): v is Animal {
+  if (!object(v)) return false;
+  migrarCategoria(v);
   return (
-    object(v) &&
     nonempty(v.id) &&
     nonempty(v.crotal) &&
     oneOf(v.especie, ESPECIES) &&
@@ -110,11 +144,10 @@ export function isAnimal(v: unknown): v is Animal {
     ].every(k => optional(v[k], nonnegative)) &&
     optional(v.fotoUrl, image) &&
     optional(v.fechaUltimoControl, pastDate) &&
-    typeof v.activo === 'boolean' &&
-    optional(v.motivoBaja, x => oneOf(x, ['Vendido', 'Muerto', 'Sacrificado', 'Otro'])) &&
+    oneOf(v.categoria, CATEGORIAS_ANIMAL) &&
     pastDate(v.fechaAlta) &&
     optional(v.fechaBaja, pastDate) &&
-    (v.activo || (!!v.fechaBaja && !!v.motivoBaja)) &&
+    (v.categoria === 'Activo' || !!v.fechaBaja) &&
     Array.isArray(v.historialSanitario) &&
     v.historialSanitario.every(isHealth) &&
     uniqueIds(v.historialSanitario)

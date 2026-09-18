@@ -12,7 +12,12 @@ import {
   PiggyBank
 } from 'lucide-react';
 import type { Especie, FarmProfile, Orientacion, UserRecord } from '../types';
-import { ESPECIES, ORIENTACIONES, PROVINCIAS, especieLabel } from '../lib/constants';
+import {
+  ESPECIES_SELECCIONABLES,
+  PROVINCIAS,
+  especieLabel,
+  orientacionesDe
+} from '../lib/constants';
 import { hasMeat, hasMilk } from '../lib/domain';
 import { Banner, Button, Card, Field, Input, SegmentedControl, Select } from './ui';
 // Lucide no tiene glifos de oveja, cabra ni caballo: se usa el icono fiel cuando existe
@@ -173,7 +178,7 @@ export function Onboarding({
                 Puedes seleccionar varias especies. Las fichas se adaptarán a tu elección.
               </p>
               <div className="grid grid-cols-2 gap-3">
-                {ESPECIES.map(especie => {
+                {ESPECIES_SELECCIONABLES.map(especie => {
                   const Icono = ICONOS_ESPECIE[especie];
                   const seleccionada = farm.especies.includes(especie);
                   return (
@@ -208,7 +213,7 @@ export function Onboarding({
                 <SegmentedControl<Orientacion>
                   key={s}
                   label={especieLabel(s)}
-                  options={ORIENTACIONES.map(value => ({ value, label: value }))}
+                  options={orientacionesDe(s).map(value => ({ value, label: value }))}
                   value={farm.orientacionPorEspecie[s] ?? ''}
                   onChange={value =>
                     patch({ orientacionPorEspecie: { ...farm.orientacionPorEspecie, [s]: value } })

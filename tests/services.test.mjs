@@ -38,7 +38,7 @@ test('rechaza duplicados, correo inválido y claves demasiado cortas',async()=>{
 });
 test('segunda cuenta vacía y completamente independiente',async()=>{
  db.saveData(first.id,'farm',farm);
- const animal={id:crypto.randomUUID(),crotal:'ES123456789012',especie:'Ovino',orientacion:'Carne',ubicacion:'Parcela 1',numeroPartos:0,fechaNacimiento:'2023-02-10',criasAsociadas:[],estadoSanitario:'Sano',raza:'Merina',sexo:'Hembra',activo:true,fechaAlta:'2025-01-01',historialSanitario:[]};
+ const animal={id:crypto.randomUUID(),crotal:'ES123456789012',especie:'Ovino',orientacion:'Carne',ubicacion:'Parcela 1',numeroPartos:0,fechaNacimiento:'2023-02-10',criasAsociadas:[],estadoSanitario:'Sano',raza:'Merina',sexo:'Hembra',categoria:'Activo',fechaAlta:'2025-01-01',historialSanitario:[]};
  db.saveData(first.id,'animals',[animal]);
  second=await auth.register('Titular Dos','dos@example.es',secret,false);
  assert.notEqual(second.salt,first.salt);assert.notEqual(second.passwordHash,first.passwordHash);

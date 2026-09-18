@@ -5,6 +5,7 @@ import {
   animalMeat,
   daysBetween,
   edadTexto,
+  esActivo,
   euro,
   hasMeat,
   hasMilk,
@@ -65,7 +66,7 @@ export function AnalyticsDashboard() {
   const enRango = (fecha: string | undefined) =>
     rangoValido && !!fecha && fecha >= desde && fecha <= hasta;
 
-  const active = data.animals.filter(a => a.activo);
+  const active = data.animals.filter(esActivo);
   const invoices = data.invoices.filter(i => enRango(i.fecha));
   const expenses = invoices
       .filter(i => i.tipo === 'Compra / Gasto')

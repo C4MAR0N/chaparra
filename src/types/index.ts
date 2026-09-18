@@ -1,5 +1,11 @@
 export type Especie = 'Vacuno' | 'Ovino' | 'Caprino' | 'Porcino' | 'Equino' | 'Avicola' | 'Otro';
 export type Orientacion = 'Carne' | 'Leche' | 'Mixto';
+/*
+ * Sustituye a `activo: boolean` + `motivoBaja`. Solo 'Activo' es ganado vivo;
+ * 'Nacido muerto' es un parto que no salió adelante y se conserva por el
+ * historial de la madre, no porque cuente como animal.
+ */
+export type CategoriaAnimal = 'Activo' | 'Muerto' | 'Nacido muerto' | 'Vendido';
 export type EstadoSanitario =
   'Sano' | 'En tratamiento' | 'En cuarentena' | 'Vacunado' | 'Observación';
 export type SexoAnimal = 'Hembra' | 'Macho';
@@ -74,8 +80,7 @@ export interface Animal {
   costeAcumuladoEuro?: number;
   fotoUrl?: string;
   fechaUltimoControl?: string;
-  activo: boolean;
-  motivoBaja?: 'Vendido' | 'Muerto' | 'Sacrificado' | 'Otro';
+  categoria: CategoriaAnimal;
   fechaAlta: string;
   fechaBaja?: string;
   historialSanitario: HealthRecord[];

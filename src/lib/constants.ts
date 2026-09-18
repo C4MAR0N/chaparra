@@ -1,4 +1,10 @@
-import type { Especie, EstadoSanitario, InvoiceCategory, Orientacion } from '../types';
+import type {
+  CategoriaAnimal,
+  Especie,
+  EstadoSanitario,
+  InvoiceCategory,
+  Orientacion
+} from '../types';
 export const ESPECIES: Especie[] = [
   'Vacuno',
   'Ovino',
@@ -8,7 +14,22 @@ export const ESPECIES: Especie[] = [
   'Avicola',
   'Otro'
 ];
+/*
+ * Solo estas cuatro se pueden elegir de nuevo, en la encuesta y en la ficha.
+ * `ESPECIES` conserva las antiguas (Equino, Avícola, Otro) porque una
+ * explotación ya guardada con una de ellas tiene que seguir validando.
+ */
+export const ESPECIES_SELECCIONABLES: Especie[] = ['Vacuno', 'Ovino', 'Caprino', 'Porcino'];
 export const ORIENTACIONES: Orientacion[] = ['Carne', 'Leche', 'Mixto'];
+/** El porcino de esta app siempre es de carne: no hay porcino de leche ni mixto. */
+export const orientacionesDe = (especie: Especie): Orientacion[] =>
+  especie === 'Porcino' ? ['Carne'] : ORIENTACIONES;
+export const CATEGORIAS_ANIMAL: CategoriaAnimal[] = [
+  'Activo',
+  'Muerto',
+  'Nacido muerto',
+  'Vendido'
+];
 export const ESTADOS: EstadoSanitario[] = [
   'Sano',
   'En tratamiento',

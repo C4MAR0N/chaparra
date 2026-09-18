@@ -1,24 +1,45 @@
 import { useState, type FormEvent } from 'react';
 import type { Animal, Especie, EstadoSanitario, Orientacion, SexoAnimal } from '../types';
 import { useFarm } from '../context/FarmContext';
-import { ESTADOS, especieLabel } from '../lib/constants';
-import { animalMeat, aplicarMadre, hasMeat, hasMilk, madreDe, today, uid } from '../lib/domain';
+import { ESTADOS, especieLabel, orientacionesDe } from '../lib/constants';
+import {
+  animalMeat,
+  aplicarMadre,
+  criasDe,
+  esDescendiente,
+  hasMeat,
+  hasMilk,
+  madreDe,
+  today,
+  uid
+} from '../lib/domain';
 import { nonnegative, validDate } from '../lib/validation';
-import { Banner, Button, Field, Input, Modal, Select, Textarea } from './ui';
+import { Banner, Button, ComboBox, Field, Input, Modal, Select, Textarea } from './ui';
 export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClose: () => void }) {
   const { data, farm, update, notify } = useFarm();
   const first = farm.especies[0];
-  const allowed: Orientacion[] =
+  /*
+   * La orientación disponible cruza dos límites: lo que da de sí la
+   * explotación (encuesta) y lo que admite la especie del propio animal (el
+   * porcino solo es de carne). Se consulta por especie porque cambia según el
+   * animal que se esté editando.
+   */
+  const capacidadFarm: Orientacion[] =
     hasMeat(farm) && hasMilk(farm)
       ? ['Carne', 'Leche', 'Mixto']
       : hasMilk(farm)
         ? ['Leche']
         : ['Carne'];
+  const orientacionesPara = (especie: Especie) =>
+    orientacionesDe(especie).filter(o => capacidadFarm.includes(o));
+  const initialAllowed = orientacionesPara(initial?.especie ?? first);
   const [draft, setDraft] = useState<Animal>(
     initial
       ? {
           ...initial,
-          orientacion: allowed.includes(initial.orientacion) ? initial.orientacion : allowed[0]
+          orientacion: initialAllowed.includes(initial.orientacion)
+            ? initial.orientacion
+            : initialAllowed[0]
         }
       : {
           id: uid(),
@@ -34,7 +55,7 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
           raza: '',
           sexo: 'Hembra',
           costeAcumuladoEuro: 0,
-          activo: true,
+          categoria: 'Activo',
           fechaAlta: today(),
           historialSanitario: []
         }
@@ -50,6 +71,15 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
   const [madre, setMadre] = useState(() => madreDe(data.animals, initial?.id ?? '')?.id ?? '');
   const patch = (values: Partial<Animal>) => setDraft({ ...draft, ...values });
   const madreElegida = data.animals.find(a => a.id === madre);
+  /*
+   * `data.animals` es la foto guardada; dentro de esta misma edición se
+   * pueden haber asociado o desvinculado crías sin guardar todavía. Se
+   * sustituye la ficha en edición por el `draft` para que el orden de las
+   * crías y el filtro de ciclos vean esos cambios sin esperar a "Guardar".
+   */
+  const animalsConDraft = data.animals.some(a => a.id === draft.id)
+    ? data.animals.map(a => (a.id === draft.id ? draft : a))
+    : [...data.animals, draft];
   const madresPosibles = data.animals
     .filter(
       a =>
@@ -59,8 +89,8 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
         (a.id === madre ||
           (a.sexo === 'Hembra' &&
             a.especie === draft.especie &&
-            // Evita ciclos: una cría de este animal no puede ser además su madre.
-            !draft.criasAsociadas.includes(a.id)))
+            // Ninguna descendiente (cría, nieta...) puede ser madre: cerraría el árbol en un ciclo.
+            !esDescendiente(animalsConDraft, a.id, draft.id)))
     )
     .sort((a, b) => a.crotal.localeCompare(b.crotal));
   const madreDudosa = Boolean(
@@ -71,12 +101,7 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
   );
   const species = [...farm.especies.filter(s => s !== 'Otro'), 'Otro'] as Especie[];
   if (initial && !species.includes(initial.especie)) species.unshift(initial.especie);
-  const orientations: Orientacion[] =
-    hasMeat(farm) && hasMilk(farm)
-      ? ['Carne', 'Leche', 'Mixto']
-      : hasMilk(farm)
-        ? ['Leche']
-        : ['Carne'];
+  const orientations = orientacionesPara(draft.especie);
   function save(event: FormEvent) {
     event.preventDefault();
     const nextErrors: Record<string, string> = {};
@@ -124,12 +149,22 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
       animalMeat(saved, farm) && saved.pesoKg !== undefined && saved.pesoKg !== initial?.pesoKg;
     update(current => ({
       ...current,
-      animals: aplicarMadre(
-        initial
-          ? current.animals.map(a => (a.id === saved.id ? saved : a))
-          : [saved, ...current.animals],
-        saved.id,
-        madre
+      /*
+       * Dos pasadas, y las dos hacen falta. La primera cuelga a este animal de
+       * su madre. La segunda cuelga de este animal a las crías que se le hayan
+       * asociado aquí, y de paso las despega de la madre que tuvieran antes:
+       * sin eso, una cría añadida desde la ficha de la madre se quedaba en las
+       * dos listas y el árbol decía que tenía dos madres.
+       */
+      animals: saved.criasAsociadas.reduce(
+        (lista, cria) => aplicarMadre(lista, cria, saved.id),
+        aplicarMadre(
+          initial
+            ? current.animals.map(a => (a.id === saved.id ? saved : a))
+            : [saved, ...current.animals],
+          saved.id,
+          madre
+        )
       ),
       weightRecords: weightChanged
         ? [
@@ -172,9 +207,11 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
               value={draft.especie}
               onChange={e => {
                 const especie = e.target.value as Especie;
+                const opciones = orientacionesPara(especie);
+                const propuesta = farm.orientacionPorEspecie[especie];
                 patch({
                   especie,
-                  orientacion: farm.orientacionPorEspecie[especie] ?? orientations[0]
+                  orientacion: propuesta && opciones.includes(propuesta) ? propuesta : opciones[0]
                 });
               }}
             >
@@ -224,15 +261,17 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
                 : 'Solo hembras de la misma especie. Queda vinculada en ambas fichas.'
             }
           >
-            <Select value={madre} onChange={e => setMadre(e.target.value)}>
-              <option value="">Sin indicar</option>
-              {madresPosibles.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.crotal}
-                  {a.raza ? ` · ${a.raza}` : ''}
-                </option>
-              ))}
-            </Select>
+            <ComboBox
+              value={madre}
+              onChange={setMadre}
+              clearLabel="Sin indicar"
+              placeholder="Escribe un crotal o una raza"
+              options={madresPosibles.map(a => ({
+                value: a.id,
+                label: a.crotal,
+                detail: a.raza || undefined
+              }))}
+            />
           </Field>
           <Field label="Ubicación">
             <Input value={draft.ubicacion} onChange={e => patch({ ubicacion: e.target.value })} />
@@ -337,16 +376,16 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
         <section className="space-y-3 rounded-xl border border-stone-200 p-4">
           <h3 className="font-semibold">Crías asociadas</h3>
           <Field label="Seleccionar una cría registrada">
-            <Select value={child} onChange={e => setChild(e.target.value)}>
-              <option value="">Seleccionar animal</option>
-              {data.animals
+            <ComboBox
+              value={child}
+              onChange={setChild}
+              clearLabel="Seleccionar animal"
+              placeholder="Escribe un crotal o una raza"
+              options={data.animals
                 .filter(a => a.id !== draft.id && !draft.criasAsociadas.includes(a.id))
-                .map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.crotal}
-                  </option>
-                ))}
-            </Select>
+                .sort((a, b) => a.crotal.localeCompare(b.crotal))
+                .map(a => ({ value: a.id, label: a.crotal, detail: a.raza || undefined }))}
+            />
           </Field>
           <Button
             variant="secondary"
@@ -358,15 +397,16 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
           >
             Asociar cría
           </Button>
-          {draft.criasAsociadas.map(id => (
-            <div key={id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <span className="font-semibold tracking-tight">
-                {data.animals.find(a => a.id === id)?.crotal}
-              </span>
+          {criasDe(animalsConDraft, draft.id).map(cria => (
+            <div
+              key={cria.id}
+              className="flex flex-wrap items-center justify-between gap-2 text-sm"
+            >
+              <span className="font-semibold tracking-tight">{cria.crotal}</span>
               <Button
                 variant="ghost"
                 onClick={() =>
-                  patch({ criasAsociadas: draft.criasAsociadas.filter(c => c !== id) })
+                  patch({ criasAsociadas: draft.criasAsociadas.filter(c => c !== cria.id) })
                 }
               >
                 Desvincular

@@ -32,7 +32,7 @@ const animal = (n, extra) => ({
   estadoSanitario: 'Sano',
   raza: 'Avileña-Negra Ibérica',
   sexo: 'Hembra',
-  activo: true,
+  categoria: 'Activo',
   fechaAlta: haceMeses(10),
   historialSanitario: [],
   ...extra

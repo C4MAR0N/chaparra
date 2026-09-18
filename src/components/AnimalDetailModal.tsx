@@ -1,13 +1,15 @@
 import { useState, type FormEvent } from 'react';
-import { Edit, Plus, Trash2 } from 'lucide-react';
-import type { Animal, EstadoSanitario } from '../types';
+import { ChevronRight, Edit, Plus, Trash2 } from 'lucide-react';
+import type { Animal, CategoriaAnimal, EstadoSanitario } from '../types';
 import { useFarm } from '../context/FarmContext';
 import {
   accumulatedCost,
   age,
   animalMeat,
   animalMilk,
+  criasDe,
   dateLabel,
+  esActivo,
   euro,
   madreDe,
   number,
@@ -15,7 +17,7 @@ import {
   uid,
   weightStats
 } from '../lib/domain';
-import { ESTADOS, especieLabel } from '../lib/constants';
+import { CATEGORIAS_ANIMAL, ESTADOS, especieLabel } from '../lib/constants';
 import {
   Badge,
   Banner,
@@ -42,11 +44,14 @@ export function AnimalDetailModal({
   const { data, farm, update, notify } = useFarm();
   // La madre es quien tiene a este animal entre sus crías: una sola relación.
   const madre = madreDe(data.animals, animal.id);
+  const abuela = madre ? madreDe(data.animals, madre.id) : undefined;
+  const crias = criasDe(data.animals, animal.id);
   const [deleting, setDeleting] = useState(false),
     [baja, setBaja] = useState(false),
     [healthOpen, setHealthOpen] = useState(false);
-  const [reason, setReason] = useState<NonNullable<Animal['motivoBaja']>>('Vendido'),
+  const [categoriaNueva, setCategoriaNueva] = useState<CategoriaAnimal>('Vendido'),
     [bajaDate, setBajaDate] = useState(today());
+  const categoriasBaja = CATEGORIAS_ANIMAL.filter(c => c !== 'Activo');
   const [health, setHealth] = useState<EstadoSanitario>(animal.estadoSanitario),
     [notes, setNotes] = useState(''),
     [cost, setCost] = useState('0'),
@@ -107,7 +112,7 @@ export function AnimalDetailModal({
     <Modal title={animal.crotal} onClose={onClose} wide>
       <div className="flex flex-wrap items-center gap-2">
         <Badge>{animal.estadoSanitario}</Badge>
-        {!animal.activo && <Badge>De baja · {animal.motivoBaja}</Badge>}
+        {!esActivo(animal) && <Badge>{animal.categoria}</Badge>}
         <p className="text-sm text-stone-600">
           {especieLabel(animal.especie)} · {animal.raza || 'Raza sin indicar'} · {animal.sexo}
         </p>
@@ -130,9 +135,9 @@ export function AnimalDetailModal({
           </div>
         ))}
       </dl>
-      {!animal.activo && (
+      {!esActivo(animal) && (
         <Banner>
-          Animal de baja desde{' '}
+          {animal.categoria} desde{' '}
           {animal.fechaBaja ? dateLabel(animal.fechaBaja) : 'fecha sin indicar'}. Su historial se
           conserva.
         </Banner>
@@ -154,37 +159,50 @@ export function AnimalDetailModal({
       <section className="space-y-3">
         <h3 className="section-heading">Parentesco</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-stone-600">Madre:</span>
+          <span className="text-sm font-semibold text-stone-600">Linaje:</span>
           {madre ? (
-            <Button
-              variant="secondary"
-              className="tracking-tight"
-              onClick={() => onSelect(madre.id)}
-            >
-              {madre.crotal}
-            </Button>
+            <>
+              {abuela && (
+                <>
+                  <Button
+                    variant="secondary"
+                    className="tracking-tight"
+                    onClick={() => onSelect(abuela.id)}
+                  >
+                    {abuela.crotal}
+                  </Button>
+                  <ChevronRight size={16} className="shrink-0 text-stone-400" aria-hidden="true" />
+                </>
+              )}
+              <Button
+                variant="secondary"
+                className="tracking-tight"
+                onClick={() => onSelect(madre.id)}
+              >
+                {madre.crotal}
+              </Button>
+              <ChevronRight size={16} className="shrink-0 text-stone-400" aria-hidden="true" />
+              <span className="font-semibold tracking-tight">{animal.crotal}</span>
+            </>
           ) : (
             <span className="text-sm text-stone-600">
-              Sin indicar. Puedes asignarla al editar la ficha.
+              Sin madre indicada. Puedes asignarla al editar la ficha.
             </span>
           )}
         </div>
         <p className="text-sm font-semibold text-stone-600">Crías:</p>
-        {animal.criasAsociadas.length ? (
+        {crias.length ? (
           <div className="flex flex-wrap gap-2">
-            {animal.criasAsociadas.map(id => {
-              const child = data.animals.find(a => a.id === id);
-              return child ? (
-                <Button
-                  key={id}
-                  variant="secondary"
-                  className="tracking-tight"
-                  onClick={() => onSelect(id)}
-                >
-                  {child.crotal}
-                </Button>
-              ) : null;
-            })}
+            {crias.map(cria => (
+              <Button
+                key={cria.id}
+                variant="secondary"
+                className="tracking-tight"
+                onClick={() => onSelect(cria.id)}
+              >
+                {cria.crotal}
+              </Button>
+            ))}
           </div>
         ) : (
           <p className="text-sm text-stone-600">
@@ -309,9 +327,9 @@ export function AnimalDetailModal({
           Eliminar
         </Button>
         <div className="flex flex-wrap gap-2">
-          {animal.activo && (
+          {esActivo(animal) && (
             <Button variant="secondary" onClick={() => setBaja(true)}>
-              Dar de baja
+              Cambiar categoría
             </Button>
           )}
           <Button onClick={onEdit}>
@@ -341,11 +359,12 @@ export function AnimalDetailModal({
           }}
         >
           Se eliminará {animal.crotal}, su historial sanitario y sus registros individuales de
-          producción. Las facturas se conservan. Para conservar el historial, utiliza Dar de baja.
+          producción. Las facturas se conservan. Para conservar el historial, utiliza Cambiar
+          categoría.
         </ConfirmModal>
       )}
       {baja && (
-        <Modal title="Dar de baja sin borrar el historial" onClose={() => setBaja(false)}>
+        <Modal title="Cambiar la categoría del animal" onClose={() => setBaja(false)}>
           <form
             className="space-y-4"
             onSubmit={e => {
@@ -353,22 +372,20 @@ export function AnimalDetailModal({
               update(d => ({
                 ...d,
                 animals: d.animals.map(a =>
-                  a.id === animal.id
-                    ? { ...a, activo: false, motivoBaja: reason, fechaBaja: bajaDate }
-                    : a
+                  a.id === animal.id ? { ...a, categoria: categoriaNueva, fechaBaja: bajaDate } : a
                 )
               }));
               setBaja(false);
-              notify('Baja registrada. El historial se conserva.');
+              notify('Categoría actualizada. El historial se conserva.');
             }}
           >
-            <Field label="Motivo de baja">
+            <Field label="Nueva categoría">
               <Select
-                value={reason}
-                onChange={e => setReason(e.target.value as NonNullable<Animal['motivoBaja']>)}
+                value={categoriaNueva}
+                onChange={e => setCategoriaNueva(e.target.value as CategoriaAnimal)}
               >
-                {['Vendido', 'Muerto', 'Sacrificado', 'Otro'].map(r => (
-                  <option key={r}>{r}</option>
+                {categoriasBaja.map(c => (
+                  <option key={c}>{c}</option>
                 ))}
               </Select>
             </Field>
@@ -382,7 +399,7 @@ export function AnimalDetailModal({
                 required
               />
             </Field>
-            <Button type="submit">Confirmar baja</Button>
+            <Button type="submit">Confirmar</Button>
           </form>
         </Modal>
       )}

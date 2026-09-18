@@ -23,6 +23,11 @@ export const animalMilk = (a: Animal, f: FarmProfile) => hasMilk(f) && a.orienta
 export const animalMeat = (a: Animal, f: FarmProfile) => hasMeat(f) && a.orientacion !== 'Leche';
 export const herdLabel = (f: FarmProfile) =>
   f.especies.some(s => s === 'Ovino' || s === 'Caprino') ? 'rebaño' : 'ganado';
+/*
+ * Único sitio que sabe qué categoría cuenta como ganado vivo. El día que
+ * cambien las categorías, solo hay que tocar esta línea.
+ */
+export const esActivo = (a: Animal) => a.categoria === 'Activo';
 /** Edad en meses cumplidos, o null si el animal no tiene una fecha válida. */
 export function mesesDeEdad(birth: string, reference = today()): number | null {
   const b = new Date(birth + 'T12:00:00'),
@@ -110,6 +115,51 @@ export const madreDe = (animals: Animal[], cria: string) =>
   animals.find(a => a.criasAsociadas.includes(cria));
 
 /*
+ * Las crías se guardan en el orden en que se fueron asociando, que no dice
+ * nada sobre la explotación. Se devuelven por fecha de nacimiento porque es
+ * el orden que el ganadero reconoce de un vistazo. Una cría sin fecha se
+ * manda al final: no hay forma de decidir si es la más vieja o la más nueva
+ * sin dato, así que no se mete entre las que sí lo tienen.
+ */
+export function criasDe(animals: Animal[], id: string): Animal[] {
+  const animal = animals.find(a => a.id === id);
+  if (!animal) return [];
+  const crias = animal.criasAsociadas
+    .map(criaId => animals.find(a => a.id === criaId))
+    .filter((a): a is Animal => !!a);
+  return [...crias].sort((a, b) => {
+    if (!a.fechaNacimiento) return b.fechaNacimiento ? 1 : 0;
+    if (!b.fechaNacimiento) return -1;
+    return a.fechaNacimiento.localeCompare(b.fechaNacimiento);
+  });
+}
+
+/*
+ * Antes solo se evitaba el ciclo directo: que la madre elegida fuera cría
+ * del propio animal. Pero el árbol se rompe igual si se elige a una nieta,
+ * bisnieta, etc., así que hace falta recorrer toda la descendencia. El
+ * conjunto de visitados no es solo una optimización: si un ciclo ya quedó
+ * guardado en los datos (A cría de B y B cría de A, por ejemplo importado a
+ * mano), sin él esta función no terminaría nunca.
+ */
+export function esDescendiente(animals: Animal[], candidata: string, raiz: string): boolean {
+  const visitados = new Set<string>();
+  const pendientes = [raiz];
+  while (pendientes.length) {
+    const actual = pendientes.pop()!;
+    if (visitados.has(actual)) continue;
+    visitados.add(actual);
+    const animal = animals.find(a => a.id === actual);
+    if (!animal) continue;
+    for (const hijoId of animal.criasAsociadas) {
+      if (hijoId === candidata) return true;
+      if (!visitados.has(hijoId)) pendientes.push(hijoId);
+    }
+  }
+  return false;
+}
+
+/*
  * La manada se organiza por ubicación: es lo primero que mira un ganadero al
  * salir al campo, porque determina a qué cercado tiene que ir. Un animal sin
  * ubicación no se esconde en un hueco: se agrupa bajo una etiqueta visible.
@@ -130,7 +180,7 @@ export interface ResumenUbicacion {
 export function porUbicacion(animals: Animal[], reference = today()): ResumenUbicacion[] {
   const grupos = new Map<string, Animal[]>();
   for (const a of animals) {
-    if (!a.activo) continue;
+    if (!esActivo(a)) continue;
     const clave = ubicacionDe(a);
     const lista = grupos.get(clave);
     if (lista) lista.push(a);
@@ -212,4 +262,4 @@ export function altasPorMes(
 
 /** Estados en los que el animal pide una visita, no solo una anotación. */
 export const necesitaAtencion = (a: Animal) =>
-  a.activo && ESTADOS_ATENCION.includes(a.estadoSanitario);
+  esActivo(a) && ESTADOS_ATENCION.includes(a.estadoSanitario);

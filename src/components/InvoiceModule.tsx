@@ -360,47 +360,12 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Añadir gasto o ingreso" onClose={onClose}>
       <form onSubmit={save} className="space-y-4">
-        <Field label="Tipo de registro">
-          <Select value={type} onChange={e => setType(e.target.value as InvoiceDoc['tipo'])}>
-            <option value="Compra / Gasto">Gasto</option>
-            <option value="Venta">Ingreso</option>
-          </Select>
-        </Field>
-        <Field label="Concepto">
-          <Input required value={title} onChange={e => setTitle(e.target.value)} />
-        </Field>
-        <Field label={type === 'Venta' ? 'Cliente' : 'Proveedor'}>
-          <Input value={party} onChange={e => setParty(e.target.value)} />
-        </Field>
-        <div className="form-grid">
-          <Field label="Importe total (€)">
-            <Input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              required
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-            />
-          </Field>
-          <Field label="Fecha">
-            <Input type="date" required value={fecha} onChange={e => setFecha(e.target.value)} />
-          </Field>
-        </div>
-        <Field label="Categoría">
-          <Select value={category} onChange={e => setCategory(e.target.value as InvoiceCategory)}>
-            {categories.map(c => (
-              <option key={c}>{c}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Notas (opcional)">
-          <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
-        </Field>
+        {/* Lo primero de todo, y no al final: si va abajo, el ganadero teclea
+            los seis campos a mano y descubre que podía leerlos de la foto
+            cuando ya ha terminado. */}
         <Field
           label="Leer los datos de una factura"
-          help="Elige el PDF que te ha llegado por correo o una foto del papel. Chaparra rellena el formulario y tú lo revisas. La imagen no se guarda salvo que lo pidas abajo."
+          help="Elige el PDF que te ha llegado por correo o hazle una foto al papel. No te preocupes por el tamaño: la foto se reduce sola. Chaparra rellena el formulario y tú lo revisas."
         >
           <Input
             type="file"
@@ -488,6 +453,45 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
             {lectura && <Banner tone="success">{lectura}</Banner>}
           </div>
         )}
+        <div className="border-t border-stone-200 pt-1" />
+        <Field label="Tipo de registro">
+          <Select value={type} onChange={e => setType(e.target.value as InvoiceDoc['tipo'])}>
+            <option value="Compra / Gasto">Gasto</option>
+            <option value="Venta">Ingreso</option>
+          </Select>
+        </Field>
+        <Field label="Concepto">
+          <Input required value={title} onChange={e => setTitle(e.target.value)} />
+        </Field>
+        <Field label={type === 'Venta' ? 'Cliente' : 'Proveedor'}>
+          <Input value={party} onChange={e => setParty(e.target.value)} />
+        </Field>
+        <div className="form-grid">
+          <Field label="Importe total (€)">
+            <Input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              required
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+            />
+          </Field>
+          <Field label="Fecha">
+            <Input type="date" required value={fecha} onChange={e => setFecha(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Categoría">
+          <Select value={category} onChange={e => setCategory(e.target.value as InvoiceCategory)}>
+            {categories.map(c => (
+              <option key={c}>{c}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Notas (opcional)">
+          <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
+        </Field>
         {busy && (
           <p role="status" className="text-sm">
             Preparando el justificante…

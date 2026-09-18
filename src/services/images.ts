@@ -1,12 +1,34 @@
 const IMAGENES = ['image/jpeg', 'image/png', 'image/webp'];
 /* Un PDF no se puede reducir sin reescribirlo, así que se guarda tal cual y el
  * tope es el que aguanta el navegador y la cuenta del servidor sin resentirse. */
-const MAX_PDF = 2 * 1024 * 1024;
+const MAX_PDF = 10 * 1024 * 1024;
+/*
+ * Tope de entrada, solo para no ahogar al navegador con algo absurdo. NO es el
+ * tamaño que se guarda: la foto se reduce antes, y una de móvil de 8 MB acaba
+ * pesando menos de medio mega.
+ */
+const MAX_ENTRADA = 40 * 1024 * 1024;
+/*
+ * Lado mayor al que se reduce la foto.
+ *
+ * 2000 px y no 1280: con 1280 el lector se comía los importes de un ticket de
+ * letra pequeña, y leer bien el papel es justo para lo que se hace la foto.
+ * A esta medida un ticket cabe de sobra y la imagen sigue pesando poco.
+ */
+const LADO_MAYOR = 2000;
+/* Tope de la validación para un justificante guardado, en caracteres. */
+const MAX_GUARDADO = 3_000_000;
 
 export async function compressImage(file: File): Promise<string> {
   if (!IMAGENES.includes(file.type)) throw new Error('Elige una imagen JPEG, PNG o WebP.');
-  if (file.size > 2 * 1024 * 1024)
-    throw new Error('La imagen supera 2 MB. Reduce su tamaño antes de adjuntarla.');
+  /*
+   * El tamaño se mira DESPUÉS de reducir, no antes. Antes se rechazaba todo lo
+   * que pasara de 2 MB, y la cámara de cualquier móvil de hoy saca fotos de 3 a
+   * 12 MB: quedaba fuera justo el caso para el que existe esto, que es sacarle
+   * una foto al ticket.
+   */
+  if (file.size > MAX_ENTRADA)
+    throw new Error('La imagen es enorme. Hazla otra vez con menos resolución.');
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -15,7 +37,7 @@ export async function compressImage(file: File): Promise<string> {
       image.onerror = () => reject(new Error('No se ha podido abrir esta imagen.'));
       image.src = url;
     });
-    const factor = Math.min(1, 1280 / Math.max(img.width, img.height));
+    const factor = Math.min(1, LADO_MAYOR / Math.max(img.width, img.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(img.width * factor);
     canvas.height = Math.round(img.height * factor);
@@ -24,7 +46,17 @@ export async function compressImage(file: File): Promise<string> {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.7);
+    /*
+     * El resultado tiene que caber en lo que acepta la validación. Si no
+     * cupiera, la ficha de la factura dejaría de ser válida y al recargar la
+     * aplicación se descartarían TODAS las facturas, no solo esta. Antes de
+     * arriesgar eso se baja la calidad, que en un ticket no se nota.
+     */
+    for (const calidad of [0.8, 0.6, 0.45, 0.3]) {
+      const salida = canvas.toDataURL('image/jpeg', calidad);
+      if (salida.length <= MAX_GUARDADO) return salida;
+    }
+    throw new Error('La foto es demasiado grande. Hazla otra vez desde un poco más lejos.');
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -34,7 +66,7 @@ export const esPdf = (dataUrl: string) => dataUrl.startsWith('data:application/p
 
 function leerPdf(file: File): Promise<string> {
   if (file.size > MAX_PDF)
-    throw new Error('El PDF supera 2 MB. Adjunta solo las páginas que necesites.');
+    throw new Error('El PDF supera 10 MB. Adjunta solo las páginas que necesites.');
   return new Promise((resolve, reject) => {
     const lector = new FileReader();
     lector.onload = () => resolve(String(lector.result));

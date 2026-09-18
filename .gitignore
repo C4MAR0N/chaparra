@@ -23,3 +23,12 @@ android/app-release-*
 
 # Imágenes de las fichas de tienda: se regeneran con `npm run capturas`.
 capturas/
+
+# Documentos de clientes. El repositorio es público: una factura, un acta de
+# saneamiento o un listado de crotales aquí dentro es una brecha de datos, y
+# borrarlo después obliga a reescribir el historial. Ya pasó una vez con un
+# acta de visita veterinaria. Estos archivos van a Chaparra-privado.
+*.pdf
+*.xlsx
+*.xls
+*.csv

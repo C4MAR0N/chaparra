@@ -1,0 +1,48 @@
+Chaparra — Todos los derechos reservados
+Copyright (c) 2026 Alejandro López Ortiz
+
+Este repositorio es público para poder publicarse con GitHub Pages y para que
+cualquiera pueda auditar cómo se tratan los datos de las explotaciones. Que se
+pueda leer no significa que se pueda usar.
+
+QUÉ SE PUEDE HACER
+
+  - Leer el código y consultarlo.
+  - Hacer un fork dentro de GitHub, que es lo que permite la propia plataforma
+    por el hecho de alojar aquí el repositorio.
+  - Citarlo, comentarlo o enlazarlo.
+
+QUÉ NO SE PUEDE HACER SIN PERMISO ESCRITO DEL TITULAR
+
+  - Usarlo, total o parcialmente, en otro producto o servicio, sea gratuito o
+    de pago.
+  - Copiarlo, adaptarlo, traducirlo o distribuirlo fuera de GitHub.
+  - Desplegarlo para terceros, aunque no se cobre por ello.
+  - Reutilizar el nombre, los iconos, la marca o el diseño.
+
+No se concede ninguna licencia de uso, ni expresa ni implícita, más allá de lo
+enumerado arriba. La obra está protegida por el Real Decreto Legislativo
+1/1996, de propiedad intelectual, y por los tratados internacionales
+aplicables.
+
+CÓDIGO DE TERCEROS
+
+Lo anterior se refiere al código propio. El repositorio incluye componentes de
+terceros que conservan su licencia original y no quedan afectados por esta:
+
+  - public/fonts/  Tipografía Plus Jakarta Sans, bajo SIL Open Font License
+                   1.1. El texto de la licencia está en public/fonts/OFL.txt.
+  - public/ocr/    Tesseract.js, su núcleo WebAssembly y el modelo de idioma
+                   español, bajo Apache License 2.0.
+
+Las dependencias declaradas en package.json mantienen igualmente la licencia
+de cada una.
+
+SIN GARANTÍA
+
+El software se ofrece tal cual, sin garantía de ningún tipo. El titular no
+responde de daños derivados de su uso.
+
+CONTACTO
+
+Para pedir permiso de uso: aloopezortiz@gmail.com

@@ -264,15 +264,13 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
   /*
-   * Leer y tirar.
+   * Leer y tirar, sin opción de conservarlo.
    *
-   * Lo que da valor al registro son las cifras, no la foto: una imagen ocupa
+   * Lo que da valor al registro son las cifras, no la imagen: una foto ocupa
    * diez mil veces más que los cuatro datos que contiene, y el archivo legal de
-   * la factura lo lleva el gestor del ganadero, no esta aplicación. Así que por
-   * defecto el justificante se usa para leerlo y se descarta al guardar. Quien
-   * lo quiera conservar lo pide marcando la casilla.
+   * la factura lo lleva el gestor del ganadero, no esta aplicación. El
+   * justificante se usa para leerlo y se descarta al guardar.
    */
-  const [guardarJustificante, setGuardarJustificante] = useState(false);
   const [leyendo, setLeyendo] = useState(''),
     [lectura, setLectura] = useState(''),
     /* Lo último que propuso la lectura. Sirve para distinguir un concepto que
@@ -350,7 +348,6 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
       proveedorOCliente: party.trim(),
       importeTotalEuro: Number(amount),
       categoria: category,
-      imagenUrl: guardarJustificante ? image : undefined,
       notas: notes.trim()
     };
     update(d => ({ ...d, invoices: [row, ...d.invoices] }));
@@ -429,21 +426,6 @@ function InvoiceForm({ onClose }: { onClose: () => void }) {
                 Quitar justificante
               </Button>
             </div>
-            <label className="flex items-start gap-3 text-sm leading-relaxed text-stone-600">
-              <input
-                type="checkbox"
-                className="mt-1 h-5 w-5 shrink-0 accent-brand-700"
-                checked={guardarJustificante}
-                onChange={e => setGuardarJustificante(e.target.checked)}
-              />
-              <span>
-                Guardar también el justificante con el registro.
-                <span className="block text-xs">
-                  Ocupa mucho y casi nunca se vuelve a mirar. Si no lo marcas, se usa solo para
-                  rellenar el formulario y no se guarda.
-                </span>
-              </span>
-            </label>
             {leyendo && (
               <p role="status" className="text-sm text-stone-600">
                 {leyendo} La primera vez que se lee una foto hay que descargar el lector; tarda un

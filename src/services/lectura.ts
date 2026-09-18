@@ -127,6 +127,81 @@ async function leerConElSistema(fuente: Blob): Promise<string | null> {
   }
 }
 
+/*
+ * Preparar la foto antes de leerla.
+ *
+ * Tesseract no espera una fotografía: espera algo parecido a un escaneo, negro
+ * sobre blanco. Darle el JPEG en color tal como sale de la cámara es lo que
+ * peor funciona, porque el papel nunca es blanco uniforme —tiene la sombra del
+ * propio móvil, el reflejo de la ventana y el color de la mesa—.
+ *
+ * Se pasa a gris y se umbraliza por zonas: cada píxel se compara con la media
+ * de su vecindario en vez de con un valor fijo. Así una esquina en penumbra se
+ * binariza con su propio listón y no se convierte en un manchón negro, que es
+ * lo que arruina la lectura de un ticket fotografiado encima de una mesa.
+ */
+async function prepararParaLeer(fuente: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(fuente);
+  try {
+    const lienzo = document.createElement('canvas');
+    lienzo.width = bitmap.width;
+    lienzo.height = bitmap.height;
+    const ctx = lienzo.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return fuente;
+    ctx.drawImage(bitmap, 0, 0);
+    const imagen = ctx.getImageData(0, 0, lienzo.width, lienzo.height);
+    const { data, width, height } = imagen;
+
+    // Gris por luminancia, que respeta cómo ve el ojo y separa mejor la tinta.
+    const gris = new Uint8ClampedArray(width * height);
+    for (let i = 0, p = 0; i < data.length; i += 4, p++)
+      gris[p] = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+
+    /*
+     * Media por zonas con una imagen integral: permite calcular la media de
+     * cualquier recuadro en cuatro sumas, así que el umbral por vecindario sale
+     * igual de rápido para una foto de doce megapíxeles que para una pequeña.
+     */
+    const integral = new Float64Array((width + 1) * (height + 1));
+    for (let y = 0; y < height; y++) {
+      let fila = 0;
+      for (let x = 0; x < width; x++) {
+        fila += gris[y * width + x];
+        integral[(y + 1) * (width + 1) + x + 1] = integral[y * (width + 1) + x + 1] + fila;
+      }
+    }
+    const radio = Math.max(8, Math.round(Math.min(width, height) / 40));
+    for (let y = 0; y < height; y++) {
+      const y0 = Math.max(0, y - radio),
+        y1 = Math.min(height - 1, y + radio);
+      for (let x = 0; x < width; x++) {
+        const x0 = Math.max(0, x - radio),
+          x1 = Math.min(width - 1, x + radio);
+        const area = (x1 - x0 + 1) * (y1 - y0 + 1);
+        const suma =
+          integral[(y1 + 1) * (width + 1) + x1 + 1] -
+          integral[y0 * (width + 1) + x1 + 1] -
+          integral[(y1 + 1) * (width + 1) + x0] +
+          integral[y0 * (width + 1) + x0];
+        /* El 88 % de la media local: el margen evita que el ruido del papel en
+         * blanco se convierta en puntos negros por todas partes. */
+        const claro = gris[y * width + x] * 100 > (suma / area) * 88;
+        const v = claro ? 255 : 0;
+        const i = (y * width + x) * 4;
+        data[i] = data[i + 1] = data[i + 2] = v;
+        data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(imagen, 0, 0);
+    return await new Promise<Blob>(r => lienzo.toBlob(b => r(b ?? fuente), 'image/png'));
+  } catch {
+    // Si algo falla, mejor leer la foto original que no leer nada.
+    return fuente;
+  } finally {
+    bitmap.close();
+  }
+}
+
 async function leerConTesseract(fuente: Blob, avisar: Progreso): Promise<string> {
   avisar('Preparando el lector…');
   const { createWorker } = await import('tesseract.js');
@@ -149,7 +224,16 @@ async function leerConTesseract(fuente: Blob, avisar: Progreso): Promise<string>
     }
   });
   try {
-    const { data } = await worker.recognize(fuente);
+    /*
+     * Dos pasadas con distinta segmentación y se queda la mejor. La automática
+     * acierta con una factura A4; la de bloque único va mejor con un ticket
+     * estrecho, donde la automática se empeña en ver columnas que no existen.
+     */
+    await worker.setParameters({ tessedit_pageseg_mode: '6' as never });
+    const bloque = await worker.recognize(fuente);
+    await worker.setParameters({ tessedit_pageseg_mode: '3' as never });
+    const automatica = await worker.recognize(fuente);
+    const { data } = bloque.data.confidence >= automatica.data.confidence ? bloque : automatica;
     /*
      * Una foto mala no se queda a medias: inventa. En las pruebas, una imagen
      * pequeña, movida y con poco contraste devolvió 0,33 € donde ponía 674,43,
@@ -170,7 +254,10 @@ async function leerConTesseract(fuente: Blob, avisar: Progreso): Promise<string>
 
 async function leerImagen(fuente: Blob, avisar: Progreso): Promise<string> {
   avisar('Leyendo la imagen…');
-  return (await leerConElSistema(fuente)) ?? (await leerConTesseract(fuente, avisar));
+  const delSistema = await leerConElSistema(fuente);
+  if (delSistema) return delSistema;
+  avisar('Preparando la foto…');
+  return leerConTesseract(await prepararParaLeer(fuente), avisar);
 }
 
 /**

@@ -28,6 +28,20 @@ export const herdLabel = (f: FarmProfile) =>
  * cambien las categorías, solo hay que tocar esta línea.
  */
 export const esActivo = (a: Animal) => a.categoria === 'Activo';
+/*
+ * Las bajas no son todas iguales. Vender y destetar son salidas: ganado que se
+ * va porque la explotación lo ha producido. Morir es una pérdida. Contarlas
+ * juntas da un número que no significa nada, porque vender veinte corderos y
+ * perder veinte se leerían igual.
+ */
+export const esSalida = (a: Animal) => a.categoria === 'Vendido' || a.categoria === 'Destetado';
+export const esMuerte = (a: Animal) => a.categoria === 'Muerto' || a.categoria === 'Nacido muerto';
+/*
+ * Sigue en la finca aunque ya no cuente como ganado activo. Una cría destetada
+ * está ahí hasta que se vende, que suele ser días después: por eso todavía se
+ * la puede vender, trasladar o dar de baja, pero no destetar otra vez.
+ */
+export const sigueEnLaExplotacion = (a: Animal) => esActivo(a) || a.categoria === 'Destetado';
 /** Edad en meses cumplidos, o null si el animal no tiene una fecha válida. */
 export function mesesDeEdad(birth: string, reference = today()): number | null {
   const b = new Date(birth + 'T12:00:00'),

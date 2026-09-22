@@ -14,7 +14,7 @@ import {
   Tag,
   X
 } from 'lucide-react';
-import type { Animal, CategoriaAnimal, Especie } from '../types';
+import type { Animal, CategoriaAnimal, Especie, TipoLote } from '../types';
 import { useFarm } from '../context/FarmContext';
 import { CATEGORIAS_ANIMAL, ESTADOS, especieLabel, tipoLoteLabel } from '../lib/constants';
 import {
@@ -24,6 +24,7 @@ import {
   esActivo,
   necesitaAtencion,
   porUbicacion,
+  sigueEnLaExplotacion,
   ubicacionDe
 } from '../lib/domain';
 import { Badge, Button, Card, EmptyState, Field, Input, Select, StatTile } from './ui';
@@ -96,6 +97,7 @@ export function CrotalList({ especie }: { especie: Especie }) {
   const [seleccionando, setSeleccionando] = useState(false),
     [marcados, setMarcados] = useState<Set<string>>(new Set()),
     [enGrupo, setEnGrupo] = useState(false),
+    [tipoInicial, setTipoInicial] = useState<TipoLote>('Destete'),
     [loteId, setLoteId] = useState<string | null>(null);
   const selected = animals.find(a => a.id === selectedId);
   const lista = useRef<HTMLDivElement>(null);
@@ -224,6 +226,25 @@ export function CrotalList({ especie }: { especie: Especie }) {
    * defecto el ganadero abriría la venta de diez añojos para ver una lista
    * vacía.
    */
+  /*
+   * Se desteta y a los pocos días se vende: es el camino normal de un cordero.
+   * Sin esto habría que volver al listado, acordarse de cuáles eran y marcarlos
+   * otra vez uno a uno. Se preseleccionan los del destete que siguen en la
+   * finca, por si alguno se vendió ya suelto o se murió entre medias.
+   */
+  function venderGrupo() {
+    if (!lote) return;
+    const miembrosDelLote = new Set(lote.animalIds);
+    const vendibles = animals.filter(a => miembrosDelLote.has(a.id) && sigueEnLaExplotacion(a));
+    if (!vendibles.length) {
+      notify('Ninguno de estos animales sigue en la explotación.');
+      return;
+    }
+    setMarcados(new Set(vendibles.map(a => a.id)));
+    setSeleccionando(true);
+    setTipoInicial('Venta');
+    setEnGrupo(true);
+  }
   function verLote(id: string) {
     reset();
     setSituacion('todos');
@@ -445,6 +466,12 @@ export function CrotalList({ especie }: { especie: Especie }) {
                   {lote.notas ? ` · ${lote.notas}` : ''}
                 </p>
               </div>
+              {lote.tipo === 'Destete' && (
+                <Button size="sm" onClick={venderGrupo}>
+                  <Layers size={16} />
+                  Vender este grupo
+                </Button>
+              )}
               <Button variant="secondary" size="sm" onClick={() => setLoteId(null)}>
                 <X size={16} />
                 Salir del lote
@@ -490,7 +517,14 @@ export function CrotalList({ especie }: { especie: Especie }) {
                 <FileSpreadsheet size={16} />
                 Excel
               </Button>
-              <Button size="sm" disabled={!marcados.size} onClick={() => setEnGrupo(true)}>
+              <Button
+                size="sm"
+                disabled={!marcados.size}
+                onClick={() => {
+                  setTipoInicial('Destete');
+                  setEnGrupo(true);
+                }}
+              >
                 <Layers size={16} />
                 Operación en grupo
               </Button>
@@ -656,6 +690,7 @@ export function CrotalList({ especie }: { especie: Especie }) {
       {enGrupo && (
         <LoteModal
           animales={seleccionados}
+          tipoInicial={tipoInicial}
           onClose={() => setEnGrupo(false)}
           onHecho={id => {
             setEnGrupo(false);
@@ -677,6 +712,10 @@ export function CrotalList({ especie }: { especie: Especie }) {
           onClose={() => setSelectedId(null)}
           onEdit={() => setEditing(selected)}
           onSelect={setSelectedId}
+          onVerLote={id => {
+            setSelectedId(null);
+            verLote(id);
+          }}
         />
       )}
     </div>

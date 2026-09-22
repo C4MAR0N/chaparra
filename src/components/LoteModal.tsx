@@ -19,14 +19,18 @@ import { Banner, Button, Field, Input, Modal, Select, Textarea } from './ui';
 export function LoteModal({
   animales,
   onClose,
-  onHecho
+  onHecho,
+  tipoInicial = 'Destete'
 }: {
   animales: Animal[];
   onClose: () => void;
   onHecho: (loteId: string) => void;
+  /* Al vender un destete ya registrado se entra con la venta elegida: obligar a
+   * cambiarlo a mano sería pedir dos veces lo que ya se ha dicho. */
+  tipoInicial?: TipoLote;
 }) {
   const { data, update, notify } = useFarm();
-  const [tipo, setTipo] = useState<TipoLote>('Destete');
+  const [tipo, setTipo] = useState<TipoLote>(tipoInicial);
   const [fecha, setFecha] = useState(today());
   const [destino, setDestino] = useState('');
   const [notas, setNotas] = useState('');

@@ -13,7 +13,9 @@ import {
   number,
   porUbicacion,
   today,
-  weightStats
+  weightStats,
+  esMuerte,
+  esSalida
 } from '../lib/domain';
 import { especieLabel } from '../lib/constants';
 import type { Especie, MilkRecord } from '../types';
@@ -184,9 +186,21 @@ export function AnalyticsDashboard() {
           label="Altas del periodo"
           value={animales.filter(a => enRango(a.fechaAlta)).length}
         />
+        {/*
+          Salidas y muertes no son lo mismo y juntarlas engaña: vender veinte
+          corderos y perder veinte son el mismo número en una casilla, y no
+          significan nada parecido. Las salidas son lo que la explotación
+          produce; las muertes, lo que pierde.
+        */}
         <StatTile
-          label="Bajas del periodo"
-          value={animales.filter(a => enRango(a.fechaBaja)).length}
+          label="Salidas del periodo"
+          value={animales.filter(a => enRango(a.fechaBaja) && esSalida(a)).length}
+          help="Ventas y destetes: el ganado que sale de la explotación."
+        />
+        <StatTile
+          label="Muertes del periodo"
+          value={animales.filter(a => enRango(a.fechaBaja) && esMuerte(a)).length}
+          help="Incluye los nacidos muertos."
         />
         {hasMeat(farm) && (
           <StatTile

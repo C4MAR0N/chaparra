@@ -158,14 +158,65 @@ test('no se puede vender ganado que ya está de baja', () => {
   );
 });
 
-test('tampoco se puede destetar ganado que ya salio de la explotacion', () => {
-  // Desde que el destete es una baja, destetar algo ya vendido no significa
-  // nada y machacaria su categoria.
+test('no se puede destetar ganado que ya salio de la explotacion', () => {
   const data = datos([animal('ES1', { categoria: 'Vendido', fechaBaja: '2026-08-01' })]);
   assert.throws(
     () => aplicarLote(data, { tipo: 'Destete', fecha: FECHA, animalIds: ['id-ES1'] }),
     /ES1/
   );
+});
+
+test('una cria destetada se puede vender despues, que es lo normal', () => {
+  /*
+   * Se desteta y a los pocos dias se vende. Si el destete cerrara la ficha del
+   * todo, el segundo paso seria imposible y el ganadero tendria que mentir en
+   * el primero.
+   */
+  const destetado = aplicarLote(datos([animal('ES1'), animal('ES2')]), {
+    tipo: 'Destete',
+    fecha: '2026-09-02',
+    animalIds: ['id-ES1', 'id-ES2']
+  });
+  const vendido = aplicarLote(destetado, {
+    tipo: 'Venta',
+    fecha: '2026-09-10',
+    animalIds: ['id-ES1', 'id-ES2']
+  });
+  assert.equal(vendido.animals[0].categoria, 'Vendido');
+  assert.equal(vendido.animals[0].fechaBaja, '2026-09-10', 'la baja pasa a ser la de la venta');
+  assert.equal(vendido.lotes.length, 2, 'quedan los dos lotes: el destete y la venta');
+  assert.ok(isFarmData(vendido));
+});
+
+test('una cria destetada no se puede destetar otra vez', () => {
+  const destetado = aplicarLote(datos([animal('ES1')]), {
+    tipo: 'Destete',
+    fecha: '2026-09-02',
+    animalIds: ['id-ES1']
+  });
+  assert.throws(
+    () => aplicarLote(destetado, { tipo: 'Destete', fecha: FECHA, animalIds: ['id-ES1'] }),
+    /Ya estaban destetados/
+  );
+});
+
+test('lo vendido o muerto no admite ya ninguna operacion', () => {
+  for (const categoria of ['Vendido', 'Muerto']) {
+    const data = datos([animal('ES1', { categoria, fechaBaja: '2026-08-01' })]);
+    for (const tipo of ['Venta', 'Baja', 'Traslado']) {
+      assert.throws(
+        () =>
+          aplicarLote(data, {
+            tipo,
+            fecha: FECHA,
+            animalIds: ['id-ES1'],
+            ubicacionDestino: 'Pantano'
+          }),
+        /Ya no están en la explotación/,
+        `${tipo} sobre ${categoria} deberia rechazarse`
+      );
+    }
+  }
 });
 
 test('un lote se puede dejar preparado con fecha futura', () => {

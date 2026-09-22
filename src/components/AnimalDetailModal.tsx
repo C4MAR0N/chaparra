@@ -35,12 +35,15 @@ export function AnimalDetailModal({
   animal,
   onClose,
   onEdit,
-  onSelect
+  onSelect,
+  onVerLote
 }: {
   animal: Animal;
   onClose: () => void;
   onEdit: () => void;
   onSelect: (id: string) => void;
+  /** Abre el lote en el listado. Sin esto, las operaciones solo se leen. */
+  onVerLote?: (loteId: string) => void;
 }) {
   const { data, farm, update, notify } = useFarm();
   // La madre es quien tiene a este animal entre sus crías: una sola relación.
@@ -224,16 +227,31 @@ export function AnimalDetailModal({
           <h3 className="section-heading">Operaciones en grupo</h3>
           <ul className="space-y-2">
             {misLotes.map(l => (
-              <li
-                key={l.id}
-                className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-stone-200 px-3 py-2 text-sm"
-              >
-                <span className="font-semibold">{etiquetaLote(l)}</span>
-                <span className="text-stone-600">
-                  Con {l.animalIds.length - 1}{' '}
-                  {l.animalIds.length - 1 === 1 ? 'animal más' : 'animales más'}
-                  {l.ubicacionDestino ? ` · a ${l.ubicacionDestino}` : ''}
-                </span>
+              <li key={l.id}>
+                {/* Saber que la 1042 se destetó el 2 de octubre sirve de poco si
+                    no se puede ver con quién: el destete es el grupo, no la
+                    ficha suelta. Al pulsar se cierra esta ventana y la lista
+                    queda filtrada a ese lote. */}
+                <button
+                  type="button"
+                  onClick={() => onVerLote?.(l.id)}
+                  disabled={!onVerLote}
+                  className="flex w-full min-h-12 flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 px-3 py-2 text-left text-sm enabled:hover:bg-brand-50"
+                >
+                  <span className="font-semibold">{etiquetaLote(l)}</span>
+                  <span className="flex items-center gap-2 text-stone-600">
+                    Con {l.animalIds.length - 1}{' '}
+                    {l.animalIds.length - 1 === 1 ? 'animal más' : 'animales más'}
+                    {l.ubicacionDestino ? ` · a ${l.ubicacionDestino}` : ''}
+                    {onVerLote && (
+                      <ChevronRight
+                        size={18}
+                        className="shrink-0 text-stone-500"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </span>
+                </button>
               </li>
             ))}
           </ul>

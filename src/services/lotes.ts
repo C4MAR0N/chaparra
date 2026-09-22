@@ -1,5 +1,5 @@
 import type { Animal, FarmData, Lote, TipoLote } from '../types';
-import { dateLabel, today, uid } from '../lib/domain';
+import { dateLabel, esActivo, sigueEnLaExplotacion, today, uid } from '../lib/domain';
 import { tipoLoteLabel } from '../lib/constants';
 
 /*
@@ -44,12 +44,16 @@ export const lotesDeAnimal = (lotes: Lote[], animalId: string) =>
   lotes.filter(l => l.animalIds.includes(animalId)).sort((a, b) => b.fecha.localeCompare(a.fecha));
 
 /*
- * Ninguna de las cuatro operaciones tiene sentido sobre ganado que ya no está
- * en la explotación: destetar, vender, dar de baja o trasladar un animal que ya
- * salió no significa nada, y dejarlo pasar seria falsear el registro sin que
- * nadie se entere. Como el destete es una salida, entra en la lista.
+ * Qué animales admite cada operación.
+ *
+ * Destetar exige ganado activo: una cría solo se desteta una vez. Lo demás
+ * admite también las ya destetadas, porque siguen en la finca —se desteta y a
+ * los pocos días se vende, que es el camino normal de un cordero—. Lo que ya se
+ * vendió o se murió no admite nada: sería falsear el registro sin que nadie se
+ * entere.
  */
-const EXIGE_ACTIVO: TipoLote[] = ['Destete', 'Venta', 'Traslado', 'Baja'];
+const admite = (tipo: TipoLote, a: Animal) =>
+  tipo === 'Destete' ? esActivo(a) : sigueEnLaExplotacion(a);
 
 /** Un lote con fecha por delante: está previsto, no ha pasado todavía. */
 export const esPrevisto = (lote: { fecha: string }) => lote.fecha > today();
@@ -74,13 +78,13 @@ export function aplicarLote(data: FarmData, propuesta: PropuestaLote): FarmData 
     throw new Error('Alguno de los animales seleccionados ya no existe. Vuelve a elegirlos.');
   const animales = seleccionados as Animal[];
 
-  if (EXIGE_ACTIVO.includes(tipo)) {
-    const inactivos = animales.filter(a => a.categoria !== 'Activo');
-    if (inactivos.length)
-      throw new Error(
-        `No se puede hacer esto con ganado que ya está de baja: ${enumerar(inactivos.map(a => a.crotal))}.`
-      );
-  }
+  const noValen = animales.filter(a => !admite(tipo, a));
+  if (noValen.length)
+    throw new Error(
+      tipo === 'Destete'
+        ? `Ya estaban destetados o dados de baja: ${enumerar(noValen.map(a => a.crotal))}.`
+        : `Ya no están en la explotación: ${enumerar(noValen.map(a => a.crotal))}.`
+    );
 
   /*
    * Una baja anterior al nacimiento deja la ficha en un estado que no significa

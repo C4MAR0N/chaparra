@@ -13,12 +13,13 @@ import {
   euro,
   madreDe,
   number,
+  sigueEnLaExplotacion,
   today,
   uid,
   weightStats
 } from '../lib/domain';
 import { CATEGORIAS_ANIMAL, ESTADOS, especieLabel } from '../lib/constants';
-import { etiquetaLote, lotesDeAnimal } from '../services/lotes';
+import { aplicarLote, etiquetaLote, lotesDeAnimal } from '../services/lotes';
 import {
   Badge,
   Banner,
@@ -374,7 +375,11 @@ export function AnimalDetailModal({
           Eliminar
         </Button>
         <div className="flex flex-wrap gap-2">
-          {esActivo(animal) && (
+          {/* También para las destetadas: siguen en la finca y lo normal es
+              venderlas a los pocos días. Cuando el destete paso a ser una
+              categoría, este botón desapareció de sus fichas y la venta suelta
+              solo se podía hacer marcándolas en el listado. */}
+          {sigueEnLaExplotacion(animal) && (
             <Button variant="secondary" onClick={() => setBaja(true)}>
               Cambiar categoría
             </Button>
@@ -416,6 +421,33 @@ export function AnimalDetailModal({
             className="space-y-4"
             onSubmit={e => {
               e.preventDefault();
+              /*
+               * Un destete deja de existir en la ficha en cuanto el animal se
+               * vende: la categoría pasa a 'Vendido' y solo queda una fecha de
+               * baja. El lote es el único sitio donde el hecho sobrevive, así
+               * que destetar desde aquí crea el suyo, de un animal, y el
+               * informe de destetes del periodo lo cuenta igual que si se
+               * hubiera hecho en grupo.
+               *
+               * Solo cuando el animal está activo. Esta pantalla también sirve
+               * para corregir una categoría mal puesta, y `aplicarLote` exige
+               * ganado activo: pasarlo siempre por ahí impediría rectificar.
+               */
+              if (categoriaNueva === 'Destetado' && esActivo(animal)) {
+                try {
+                  const siguiente = aplicarLote(data, {
+                    tipo: 'Destete',
+                    fecha: bajaDate,
+                    animalIds: [animal.id]
+                  });
+                  update(() => siguiente);
+                  setBaja(false);
+                  notify('Destete registrado. Contará en los destetes del periodo.');
+                } catch (err) {
+                  notify(err instanceof Error ? err.message : 'No se ha podido registrar.');
+                }
+                return;
+              }
               update(d => ({
                 ...d,
                 animals: d.animals.map(a =>

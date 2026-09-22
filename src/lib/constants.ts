@@ -27,6 +27,7 @@ export const orientacionesDe = (especie: Especie): Orientacion[] =>
   especie === 'Porcino' ? ['Carne'] : ORIENTACIONES;
 export const CATEGORIAS_ANIMAL: CategoriaAnimal[] = [
   'Activo',
+  'Destetado',
   'Muerto',
   'Nacido muerto',
   'Vendido'
@@ -121,7 +122,7 @@ export const TIPOS_LOTE: {
   {
     tipo: 'Destete',
     titulo: 'Destete',
-    efecto: 'Quedan registrados como destetados ese día. No cambia nada más de su ficha.'
+    efecto: 'Pasan a «Destetado» y se les pone esa fecha de baja. Dejan de contar como activos.'
   },
   {
     tipo: 'Venta',

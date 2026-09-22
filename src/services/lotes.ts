@@ -44,12 +44,12 @@ export const lotesDeAnimal = (lotes: Lote[], animalId: string) =>
   lotes.filter(l => l.animalIds.includes(animalId)).sort((a, b) => b.fecha.localeCompare(a.fecha));
 
 /*
- * Solo el destete se puede anotar sobre ganado que ya no está: es un hecho del
- * pasado y no cambia nada de la ficha. Vender, dar de baja o trasladar un animal
- * ya vendido o muerto no significa nada, y dejarlo pasar sería falsear el
- * registro sin que nadie se entere.
+ * Ninguna de las cuatro operaciones tiene sentido sobre ganado que ya no está
+ * en la explotación: destetar, vender, dar de baja o trasladar un animal que ya
+ * salió no significa nada, y dejarlo pasar seria falsear el registro sin que
+ * nadie se entere. Como el destete es una salida, entra en la lista.
  */
-const EXIGE_ACTIVO: TipoLote[] = ['Venta', 'Traslado', 'Baja'];
+const EXIGE_ACTIVO: TipoLote[] = ['Destete', 'Venta', 'Traslado', 'Baja'];
 
 /** Un lote con fecha por delante: está previsto, no ha pasado todavía. */
 export const esPrevisto = (lote: { fecha: string }) => lote.fecha > today();
@@ -99,8 +99,12 @@ export function aplicarLote(data: FarmData, propuesta: PropuestaLote): FarmData 
     if (tipo === 'Venta') return { ...a, categoria: 'Vendido', fechaBaja: fecha };
     if (tipo === 'Baja') return { ...a, categoria: 'Muerto', fechaBaja: fecha };
     if (tipo === 'Traslado') return { ...a, ubicacion: destino };
-    // El destete no cambia la ficha: el hecho lo guarda el propio lote.
-    return a;
+    /*
+     * El destete es la salida de la cría, no un hito de su crianza: a partir de
+     * ese día deja de formar parte de la explotación. Por eso da de baja con la
+     * misma fecha, igual que la venta, y no se queda contando como activa.
+     */
+    return { ...a, categoria: 'Destetado', fechaBaja: fecha };
   };
 
   const lote: Lote = {
@@ -135,5 +139,5 @@ export function describirLote(
     return `${antesDeHacerlo ? 'Se moverán' : 'Se han movido'} ${cuantos} a ${propuesta.ubicacionDestino?.trim() || 'la ubicación indicada'}.`;
   const hembras = animales.filter(a => a.sexo === 'Hembra').length;
   const sexos = hembras ? ` (${hembras} ${hembras === 1 ? 'hembra' : 'hembras'})` : '';
-  return `${antesDeHacerlo ? 'Se anotará' : 'Se ha anotado'} el destete de ${cuantos} el ${cuando}${sexos}.`;
+  return `${baja} ${cuantos} como destetados el ${cuando}${sexos}.`;
 }

@@ -4,6 +4,7 @@ import test from 'node:test';
 const { aplicarLote, describirLote, etiquetaLote, animalesDelLote, lotesDeAnimal, esPrevisto } =
   await import('../src/services/lotes.ts');
 const { isFarmData } = await import('../src/lib/validation.ts');
+const { esActivo } = await import('../src/lib/domain.ts');
 
 /*
  * Operaciones en grupo.
@@ -118,12 +119,31 @@ test('un traslado cambia la ubicación y guarda el destino', () => {
   assert.equal(salida.lotes[0].ubicacionDestino, 'Pantano');
 });
 
-test('un destete no toca la ficha: el hecho lo guarda el lote', () => {
-  const data = datos([animal('ES1')]);
-  const salida = aplicarLote(data, { tipo: 'Destete', fecha: FECHA, animalIds: ['id-ES1'] });
-  assert.deepEqual(salida.animals[0], data.animals[0], 'la ficha sale igual que entró');
+test('un destete da de baja como «Destetado», con su fecha', () => {
+  /*
+   * En esta explotacion el destete es la salida de la cria: a partir de ese dia
+   * ya no forma parte de la ganaderia. Por eso no es una anotacion al margen,
+   * es una baja con todas las letras, como la venta.
+   */
+  const salida = aplicarLote(datos([animal('ES1'), animal('ES2')]), {
+    tipo: 'Destete',
+    fecha: FECHA,
+    animalIds: ['id-ES1']
+  });
+  assert.equal(salida.animals[0].categoria, 'Destetado');
+  assert.equal(salida.animals[0].fechaBaja, FECHA, 'la fecha del destete es la de baja');
+  assert.equal(salida.animals[1].categoria, 'Activo', 'el que no iba en el lote no se toca');
   assert.equal(salida.lotes[0].tipo, 'Destete');
-  assert.equal(salida.lotes[0].fecha, FECHA);
+  assert.ok(isFarmData(salida));
+});
+
+test('un animal destetado deja de contar como activo', () => {
+  const salida = aplicarLote(datos([animal('ES1')]), {
+    tipo: 'Destete',
+    fecha: FECHA,
+    animalIds: ['id-ES1']
+  });
+  assert.equal(esActivo(salida.animals[0]), false);
 });
 
 test('no se puede vender ganado que ya está de baja', () => {
@@ -138,12 +158,14 @@ test('no se puede vender ganado que ya está de baja', () => {
   );
 });
 
-test('un destete sí se puede anotar sobre ganado que ya no está', () => {
-  // Es un hecho del pasado y no cambia nada: prohibirlo impediría recuperar
-  // el historial de una paridera cuyos corderos ya se vendieron.
+test('tampoco se puede destetar ganado que ya salio de la explotacion', () => {
+  // Desde que el destete es una baja, destetar algo ya vendido no significa
+  // nada y machacaria su categoria.
   const data = datos([animal('ES1', { categoria: 'Vendido', fechaBaja: '2026-08-01' })]);
-  const salida = aplicarLote(data, { tipo: 'Destete', fecha: FECHA, animalIds: ['id-ES1'] });
-  assert.equal(salida.lotes.length, 1);
+  assert.throws(
+    () => aplicarLote(data, { tipo: 'Destete', fecha: FECHA, animalIds: ['id-ES1'] }),
+    /ES1/
+  );
 });
 
 test('un lote se puede dejar preparado con fecha futura', () => {
@@ -294,7 +316,7 @@ test('la frase de confirmación dice lo que va a pasar, no «se aplicarán cambi
   );
   assert.match(
     describirLote({ tipo: 'Destete', fecha: FECHA, animalIds: ids }, animales),
-    /destete de 2 animales/
+    /darán de baja 2 animales como destetados/
   );
 });
 
@@ -305,7 +327,7 @@ test('la misma frase se dice en pasado despues de hacerlo', () => {
   assert.match(describirLote(propuesta, animales, false), /^Se han dado de baja/);
   assert.match(
     describirLote({ ...propuesta, tipo: 'Destete' }, animales, false),
-    /^Se ha anotado el destete/
+    /^Se han dado de baja 1 animal como destetados/
   );
 });
 

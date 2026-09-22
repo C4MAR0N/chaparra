@@ -44,9 +44,11 @@ export function LoteModal({
     ubicacionDestino: tipo === 'Traslado' ? destino : undefined,
     notas
   };
-  /* Las bajas y las ventas no se pueden deshacer desde la pantalla, así que se
-   * piden con la frase delante y no con un botón que dice solo «Aceptar». */
-  const delicado = tipo === 'Venta' || tipo === 'Baja';
+  /* Todo lo que da de baja —vender, destetar, morir— saca al animal de la
+   * explotación y no se deshace desde esta pantalla, así que se pide con la
+   * frase delante y no con un botón que dice solo «Aceptar». Trasladar no:
+   * cambiar de cercado se arregla volviendo a trasladar. */
+  const delicado = tipo !== 'Traslado';
   const previsto = fecha > today();
 
   function guardar(e: FormEvent) {

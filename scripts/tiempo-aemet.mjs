@@ -23,16 +23,56 @@ if (!CLAVE) {
   process.exit(1);
 }
 
+const esperar = ms => new Promise(r => setTimeout(r, ms));
+
+/*
+ * AEMET corta con un 429 cuando le llegan peticiones seguidas, y lo hace aunque
+ * sean dos: su límite no es generoso y lo aplica por clave. Sin reintentos, un
+ * corte de unos segundos tumbaba la ejecución entera y salía un correo de fallo
+ * para algo que se arregla solo esperando.
+ *
+ * La espera crece en cada intento. En el peor caso son poco más de tres
+ * minutos, que para una tarea programada cuatro veces al día no es nada, y
+ * evita el aviso en falso.
+ */
+const REINTENTOS = 4;
+const ESPERA_BASE_MS = 20000;
+
 /** AEMET responde con un JSON que contiene la URL real de los datos. */
 async function aemet(ruta) {
+  for (let intento = 0; ; intento++) {
+    try {
+      return await pedirAemet(ruta);
+    } catch (e) {
+      if (!e.limitada || intento >= REINTENTOS) throw e;
+      const espera = ESPERA_BASE_MS * (intento + 1);
+      console.warn(
+        `AEMET ha limitado las peticiones. Reintento ${intento + 1} de ${REINTENTOS} en ${espera / 1000} s.`
+      );
+      await esperar(espera);
+    }
+  }
+}
+
+function limitada(mensaje) {
+  const e = new Error(mensaje);
+  e.limitada = true;
+  return e;
+}
+
+async function pedirAemet(ruta) {
   const res = await fetch(`${BASE}${ruta}`, { headers: { api_key: CLAVE } });
   if (res.status === 401) throw new Error('API key de AEMET rechazada o caducada (401).');
-  if (res.status === 429) throw new Error('AEMET ha limitado las peticiones (429).');
+  if (res.status === 429) throw limitada('AEMET ha limitado las peticiones (429).');
   if (!res.ok) throw new Error(`AEMET ha respondido ${res.status} en ${ruta}`);
   const sobre = await res.json();
+  // El límite también llega dentro del sobre, con el HTTP en 200.
+  if (sobre.estado === 429)
+    throw limitada(`AEMET: ${sobre.descripcion ?? 'demasiadas peticiones'}`);
   if (sobre.estado && sobre.estado !== 200) throw new Error(`AEMET: ${sobre.descripcion}`);
   if (!sobre.datos) throw new Error(`AEMET no ha devuelto URL de datos en ${ruta}`);
   const datos = await fetch(sobre.datos);
+  if (datos.status === 429) throw limitada('AEMET ha limitado la descarga de datos (429).');
   if (!datos.ok) throw new Error(`No se han podido descargar los datos de ${ruta}`);
   return leerJson(datos, ruta);
 }

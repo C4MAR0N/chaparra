@@ -150,19 +150,15 @@ export function Tiempo() {
             </p>
           </div>
 
-          <p className="text-xs leading-relaxed text-stone-600">
-            {prevision.fuentes.includes('AEMET') ? (
-              <>
-                Datos de <strong>AEMET</strong>, la agencia estatal de meteorología. Los litros de
-                los días que AEMET no cubre proceden de <strong>Open-Meteo</strong> (modelo ECMWF);
-                AEMET solo publica milímetros en su predicción a 48 horas.
-              </>
-            ) : (
-              <>
-                Datos de <strong>Open-Meteo</strong> (modelo ECMWF).
-              </>
-            )}
-          </p>
+          {/*
+            Solo el crédito, sin la explicación de qué día viene de dónde: al
+            ganadero le da igual que AEMET publique milímetros a 48 horas y el
+            resto lo complete un modelo. Pero la línea no se puede quitar del
+            todo: Open-Meteo se usa bajo CC-BY 4.0 y AEMET exige citar el
+            origen, así que nombrar la fuente es una condición de uso, no un
+            adorno.
+          */}
+          <p className="text-xs text-stone-600">Fuente: {prevision.fuentes.join(' · ')}</p>
         </>
       )}
     </Card>

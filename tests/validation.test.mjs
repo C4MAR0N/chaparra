@@ -176,3 +176,26 @@ test('una copia de seguridad anterior a los lotes se sigue pudiendo restaurar', 
   const resultado = parseBackup(backup);
   assert.deepEqual(resultado.data.lotes, [], 'se dan por vacios en vez de rechazar la copia');
 });
+
+test('la baja admite fecha futura, pero el nacimiento y el alta no', () => {
+  /*
+   * Es la unica fecha de la ficha que puede ir por delante de hoy, y solo
+   * porque los lotes permiten dejar una venta preparada antes de que llegue el
+   * dia. Si esto se relajara de mas, un animal podria nacer la semana que
+   * viene y estar en la explotacion desde hoy.
+   */
+  assert.ok(
+    isAnimal(animalBase({ categoria: 'Vendido', fechaBaja: '2099-01-01' })),
+    'una venta dejada preparada tiene que validar'
+  );
+  assert.equal(
+    isAnimal(animalBase({ categoria: 'Activo', fechaNacimiento: '2099-01-01' })),
+    false,
+    'un animal no puede haber nacido en el futuro'
+  );
+  assert.equal(
+    isAnimal(animalBase({ categoria: 'Activo', fechaAlta: '2099-01-01' })),
+    false,
+    'ni darse de alta en el futuro'
+  );
+});

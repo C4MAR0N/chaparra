@@ -47,6 +47,7 @@ export function LoteModal({
   /* Las bajas y las ventas no se pueden deshacer desde la pantalla, así que se
    * piden con la frase delante y no con un botón que dice solo «Aceptar». */
   const delicado = tipo === 'Venta' || tipo === 'Baja';
+  const previsto = fecha > today();
 
   function guardar(e: FormEvent) {
     e.preventDefault();
@@ -88,14 +89,11 @@ export function LoteModal({
           </Select>
         </Field>
 
-        <Field label="Fecha" help="El día en que pasó, que no tiene por qué ser hoy.">
-          <Input
-            type="date"
-            value={fecha}
-            max={today()}
-            required
-            onChange={e => setFecha(e.target.value)}
-          />
+        <Field
+          label="Fecha"
+          help="El día en que pasa. Puede ser anterior a hoy, o posterior si lo estás dejando preparado."
+        >
+          <Input type="date" value={fecha} required onChange={e => setFecha(e.target.value)} />
         </Field>
 
         {tipo === 'Traslado' && (
@@ -125,6 +123,13 @@ export function LoteModal({
         <Banner tone={delicado ? 'warning' : 'success'}>
           {describirLote(propuesta, animales)}
           {delicado && ' Esto no se puede deshacer desde esta pantalla.'}
+          {/* Una venta con fecha por delante se aplica igual en el momento: el
+              animal deja de contar como activo hoy, no el día que dice la
+              fecha. Decirlo aquí evita descubrirlo en el recuento. */}
+          {previsto &&
+            delicado &&
+            ' Ojo: la fecha es futura, pero dejan de contar como activos ya.'}
+          {previsto && !delicado && ' Queda anotado para esa fecha.'}
         </Banner>
 
         {error && (

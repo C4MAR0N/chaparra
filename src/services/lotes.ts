@@ -51,6 +51,9 @@ export const lotesDeAnimal = (lotes: Lote[], animalId: string) =>
  */
 const EXIGE_ACTIVO: TipoLote[] = ['Venta', 'Traslado', 'Baja'];
 
+/** Un lote con fecha por delante: está previsto, no ha pasado todavía. */
+export const esPrevisto = (lote: { fecha: string }) => lote.fecha > today();
+
 const enumerar = (crotales: string[]) =>
   crotales.length > 4
     ? `${crotales.slice(0, 4).join(', ')} y ${crotales.length - 4} más`
@@ -62,7 +65,6 @@ export function aplicarLote(data: FarmData, propuesta: PropuestaLote): FarmData 
   const destino = propuesta.ubicacionDestino?.trim() ?? '';
 
   if (!animalIds.length) throw new Error('No has seleccionado ningún animal.');
-  if (fecha > today()) throw new Error('La fecha no puede ser posterior a hoy.');
   if (tipo === 'Traslado' && !destino)
     throw new Error('Indica a qué ubicación se traslada el grupo.');
 

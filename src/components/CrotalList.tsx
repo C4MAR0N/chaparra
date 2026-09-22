@@ -28,7 +28,7 @@ import {
 } from '../lib/domain';
 import { Badge, Button, Card, EmptyState, Field, Input, Select, StatTile } from './ui';
 import { descargarExcel } from '../services/excel';
-import { etiquetaLote } from '../services/lotes';
+import { esPrevisto, etiquetaLote } from '../services/lotes';
 import { AnimalFormModal } from './AnimalFormModal';
 import { AnimalDetailModal } from './AnimalDetailModal';
 import { LoteModal } from './LoteModal';
@@ -135,9 +135,13 @@ export function CrotalList({ especie }: { especie: Especie }) {
         .sort((a, b) =>
           sort === 'age'
             ? a.fechaNacimiento.localeCompare(b.fechaNacimiento)
-            : sort === 'review'
-              ? (b.fechaUltimoControl ?? '').localeCompare(a.fechaUltimoControl ?? '')
-              : a.crotal.localeCompare(b.crotal, 'es', { numeric: true })
+            : /* Los más jóvenes primero: es como se buscan las crías que se
+                 venden, que son siempre las últimas que han nacido. */
+              sort === 'joven'
+              ? b.fechaNacimiento.localeCompare(a.fechaNacimiento)
+              : sort === 'review'
+                ? (b.fechaUltimoControl ?? '').localeCompare(a.fechaUltimoControl ?? '')
+                : a.crotal.localeCompare(b.crotal, 'es', { numeric: true })
         ),
     [animals, miembros, search, health, sex, ubicacion, situacion, sort]
   );
@@ -291,8 +295,11 @@ export function CrotalList({ especie }: { especie: Especie }) {
                 >
                   <Layers size={18} className="shrink-0 text-brand-700" aria-hidden="true" />
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold">
+                    <p className="flex flex-wrap items-center gap-2 font-semibold">
                       {tipoLoteLabel(l.tipo)} · {dateLabel(l.fecha)}
+                      {/* Un destete dejado preparado no se puede confundir con
+                          uno que ya se ha hecho. */}
+                      {esPrevisto(l) && <Badge>Previsto</Badge>}
                     </p>
                     <p className="mt-1 text-sm text-stone-600">
                       {l.ubicacionDestino ? `A ${l.ubicacionDestino}. ` : ''}
@@ -416,7 +423,8 @@ export function CrotalList({ especie }: { especie: Especie }) {
               <Field label="Ordenar por">
                 <Select value={sort} onChange={e => setSort(e.target.value)}>
                   <option value="crotal">Crotal</option>
-                  <option value="age">Mayor edad</option>
+                  <option value="joven">Más jóvenes primero</option>
+                  <option value="age">Más viejos primero</option>
                   <option value="review">Última revisión</option>
                 </Select>
               </Field>
@@ -426,7 +434,10 @@ export function CrotalList({ especie }: { especie: Especie }) {
             <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-brand-200 bg-brand-50 p-4">
               <Layers size={20} className="shrink-0 text-brand-700" aria-hidden="true" />
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-brand-900">{etiquetaLote(lote)}</p>
+                <p className="flex flex-wrap items-center gap-2 font-semibold text-brand-900">
+                  {etiquetaLote(lote)}
+                  {esPrevisto(lote) && <Badge>Previsto</Badge>}
+                </p>
                 <p className="mt-1 text-sm text-stone-600">
                   {lote.animalIds.length} {lote.animalIds.length === 1 ? 'animal' : 'animales'} en
                   esta operación

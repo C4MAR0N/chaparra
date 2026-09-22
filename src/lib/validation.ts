@@ -148,7 +148,14 @@ export function isAnimal(v: unknown): v is Animal {
     optional(v.fechaUltimoControl, pastDate) &&
     oneOf(v.categoria, CATEGORIAS_ANIMAL) &&
     pastDate(v.fechaAlta) &&
-    optional(v.fechaBaja, pastDate) &&
+    /*
+     * La baja sí admite fecha futura, al revés que el resto. Es lo que permite
+     * dejar preparada la venta o el destete de un lote antes de que llegue el
+     * día, que es como se trabaja: el camión se cierra con antelación. El
+     * nacimiento y el alta siguen sin poder ser futuros, porque un animal que
+     * todavía no ha nacido no está en la explotación.
+     */
+    optional(v.fechaBaja, validDate) &&
     (v.categoria === 'Activo' || !!v.fechaBaja) &&
     Array.isArray(v.historialSanitario) &&
     v.historialSanitario.every(isHealth) &&
@@ -238,7 +245,9 @@ export function isLote(v: unknown): v is Lote {
       v.tipo,
       TIPOS_LOTE.map(t => t.tipo)
     ) &&
-    pastDate(v.fecha) &&
+    // Un lote se puede dejar planificado: el destete del mes que viene existe
+    // como decisión antes de existir como hecho.
+    validDate(v.fecha) &&
     strings(v.animalIds) &&
     v.animalIds.length > 0 &&
     new Set(v.animalIds).size === v.animalIds.length &&

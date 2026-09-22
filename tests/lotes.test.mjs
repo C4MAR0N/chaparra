@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { aplicarLote, describirLote, etiquetaLote, animalesDelLote, lotesDeAnimal } =
+const { aplicarLote, describirLote, etiquetaLote, animalesDelLote, lotesDeAnimal, esPrevisto } =
   await import('../src/services/lotes.ts');
 const { isFarmData } = await import('../src/lib/validation.ts');
 
@@ -71,6 +71,8 @@ const datos = (animals, lotes = []) => ({
 });
 
 const FECHA = '2026-09-02';
+// Por delante de hoy: un lote que se deja preparado.
+const FUTURO = '2099-01-01';
 
 test('una venta da de baja a todo el grupo y deja constancia de la operación', () => {
   const data = datos([animal('ES1'), animal('ES2'), animal('ES3')]);
@@ -144,16 +146,39 @@ test('un destete sí se puede anotar sobre ganado que ya no está', () => {
   assert.equal(salida.lotes.length, 1);
 });
 
-test('la fecha no puede ser del futuro', () => {
-  assert.throws(
-    () =>
-      aplicarLote(datos([animal('ES1')]), {
-        tipo: 'Venta',
-        fecha: '2099-01-01',
-        animalIds: ['id-ES1']
-      }),
-    /posterior a hoy/
-  );
+test('un lote se puede dejar preparado con fecha futura', () => {
+  /*
+   * El ganadero cierra el camion con antelacion y quiere dejar apuntada la
+   * venta antes de que llegue el dia. El resto de la aplicacion no admite
+   * fechas futuras, pero un lote es tanto un hecho como una decision.
+   */
+  const salida = aplicarLote(datos([animal('ES1')]), {
+    tipo: 'Venta',
+    fecha: FUTURO,
+    animalIds: ['id-ES1']
+  });
+  assert.equal(salida.lotes[0].fecha, FUTURO);
+  assert.equal(salida.animals[0].fechaBaja, FUTURO);
+  assert.ok(isFarmData(salida), 'una baja con fecha futura tiene que seguir validando');
+});
+
+test('un lote previsto se distingue de uno ya hecho', () => {
+  assert.equal(esPrevisto({ fecha: FUTURO }), true);
+  assert.equal(esPrevisto({ fecha: FECHA }), false);
+});
+
+test('la venta prevista da de baja ya, no el dia de la fecha', () => {
+  /*
+   * Es la consecuencia incomoda de permitir la fecha futura, y esta probada a
+   * proposito: si algun dia se decide que la baja se aplique al llegar el dia,
+   * esta prueba tiene que fallar y obligar a pensarlo.
+   */
+  const salida = aplicarLote(datos([animal('ES1')]), {
+    tipo: 'Venta',
+    fecha: FUTURO,
+    animalIds: ['id-ES1']
+  });
+  assert.equal(salida.animals[0].categoria, 'Vendido');
 });
 
 test('la fecha no puede ser anterior al nacimiento del animal', () => {

@@ -68,6 +68,7 @@ const datos = (extra = {}) => ({
   saleTemplate: PLANTILLA,
   milkRecords: [],
   weightRecords: [],
+  lotes: [],
   ...extra
 });
 
@@ -245,6 +246,7 @@ test('el resumen se lee en castellano y en singular cuando toca', () => {
       facturasAnadidas: 0,
       ordenosAnadidos: 0,
       pesadasAnadidas: 0,
+      lotesAnadidos: 0,
       descartados: 0
     }),
     /12 animales nuevos.*3 crotales ya están/s
@@ -256,8 +258,58 @@ test('el resumen se lee en castellano y en singular cuando toca', () => {
       facturasAnadidas: 0,
       ordenosAnadidos: 0,
       pesadasAnadidas: 0,
+      lotesAnadidos: 0,
       descartados: 0
     }),
     /no traía nada/
   );
+});
+
+test('los lotes de la copia se traen con los animales que resuelven', () => {
+  /*
+   * El destete de la copia habla de dos corderos: uno que el ganadero ya tiene
+   * (mismo crotal) y otro que no existe. Perder el lote entero por el que falta
+   * seria peor que traerlo con los que hay, asi que entra recortado y lo que
+   * queda fuera se cuenta como descartado.
+   */
+  const actual = datos({ animals: [animal('ES1')] });
+  const entrante = datos({
+    animals: [animal('ES1')],
+    lotes: [
+      {
+        id: 'l1',
+        tipo: 'Destete',
+        fecha: '2026-05-02',
+        animalIds: ['id-ES1', 'no-existe']
+      }
+    ]
+  });
+  const { datos: fusion, resumen } = fusionarCopia(actual, entrante);
+
+  assert.equal(resumen.lotesAnadidos, 1);
+  assert.equal(resumen.descartados, 1, 'el miembro que no resuelve se cuenta aparte');
+  assert.deepEqual(fusion.lotes[0].animalIds, [fusion.animals[0].id]);
+  assert.ok(isFarmData(fusion));
+});
+
+test('un lote del que no resuelve ningun animal se queda fuera', () => {
+  // La validacion rechaza un lote vacio: traerlo asi romperia la explotacion.
+  const entrante = datos({
+    lotes: [{ id: 'l1', tipo: 'Venta', fecha: '2026-05-02', animalIds: ['fantasma'] }]
+  });
+  const { datos: fusion, resumen } = fusionarCopia(datos(), entrante);
+  assert.equal(fusion.lotes.length, 0);
+  assert.equal(resumen.lotesAnadidos, 0);
+  assert.ok(isFarmData(fusion));
+});
+
+test('importar dos veces la misma copia no duplica los lotes', () => {
+  const entrante = datos({
+    animals: [animal('ES1')],
+    lotes: [{ id: 'l1', tipo: 'Destete', fecha: '2026-05-02', animalIds: ['id-ES1'] }]
+  });
+  const primera = fusionarCopia(datos(), entrante);
+  const segunda = fusionarCopia(primera.datos, entrante);
+  assert.equal(segunda.datos.lotes.length, 1);
+  assert.equal(segunda.resumen.lotesAnadidos, 0);
 });

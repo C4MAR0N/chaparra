@@ -135,6 +135,10 @@ test('acotar la exportación arrastra solo lo que cuelga de esos animales', asyn
       { id: 'f1', fecha: '2026-01-01', crotalesRelacionados: ['ES1'] },
       { id: 'f2', fecha: '2026-01-01', crotalesRelacionados: ['ES2'] },
       { id: 'f3', fecha: '2026-01-01' }
+    ],
+    lotes: [
+      { id: 'l1', tipo: 'Destete', fecha: '2026-01-02', animalIds: ['p1', 'v1'] },
+      { id: 'l2', tipo: 'Venta', fecha: '2026-01-03', animalIds: ['v1'] }
     ]
   };
   const solo = acotar(data, [pantano]);
@@ -156,4 +160,14 @@ test('acotar la exportación arrastra solo lo que cuelga de esos animales', asyn
     ['f1'],
     'solo viajan las facturas que citan crotales de la manada'
   );
+  /*
+   * De un lote mixto solo viaja su parte. El destete incluia a los dos, asi que
+   * sale con el del Pantano; la venta era solo del otro y no aparece.
+   */
+  assert.deepEqual(
+    solo.lotes.map(l => l.id),
+    ['l1'],
+    'la venta del animal de la Virgen no pinta nada en el cuaderno del Pantano'
+  );
+  assert.deepEqual(solo.lotes[0].animalIds, ['p1'], 'el lote llega recortado a la manada');
 });

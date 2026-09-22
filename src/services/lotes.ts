@@ -1,0 +1,137 @@
+import type { Animal, FarmData, Lote, TipoLote } from '../types';
+import { dateLabel, today, uid } from '../lib/domain';
+import { tipoLoteLabel } from '../lib/constants';
+
+/*
+ * Operaciones en grupo.
+ *
+ * Un ganadero no vende una vaca: vende diez. No desteta un cordero: desteta la
+ * paridera entera. Hacerlo de uno en uno son diez formularios con la misma
+ * fecha escrita diez veces, y a la tercera se equivoca.
+ *
+ * Aquí se aplica de una vez y se deja constancia de que fue **una sola
+ * operación**, que es lo que permite volver luego a «el destete del 2 de
+ * octubre» y ver el grupo entero en lugar de diez fichas sueltas.
+ *
+ * Es una función pura a propósito: recibe la explotación y devuelve otra. Lo que
+ * decide qué le pasa a cada animal no puede vivir dentro de un componente, tanto
+ * porque hay que poder probarlo como porque una venta da de baja ganado de
+ * verdad y un fallo aquí se ve en las cuentas, no en la pantalla.
+ */
+
+export interface PropuestaLote {
+  tipo: TipoLote;
+  fecha: string;
+  animalIds: string[];
+  ubicacionDestino?: string;
+  notas?: string;
+}
+
+/** El nombre por el que el ganadero lo reconoce: «Destete del 2/10/2026». */
+export const etiquetaLote = (lote: Lote) =>
+  `${tipoLoteLabel(lote.tipo)} del ${dateLabel(lote.fecha)}`;
+
+/** Los animales de un lote, en el orden en que se leen los crotales. */
+export function animalesDelLote(animals: Animal[], lote: Lote): Animal[] {
+  const miembros = new Set(lote.animalIds);
+  return animals
+    .filter(a => miembros.has(a.id))
+    .sort((a, b) => a.crotal.localeCompare(b.crotal, 'es', { numeric: true }));
+}
+
+/** Los lotes en los que ha estado un animal, del más reciente al más antiguo. */
+export const lotesDeAnimal = (lotes: Lote[], animalId: string) =>
+  lotes.filter(l => l.animalIds.includes(animalId)).sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+/*
+ * Solo el destete se puede anotar sobre ganado que ya no está: es un hecho del
+ * pasado y no cambia nada de la ficha. Vender, dar de baja o trasladar un animal
+ * ya vendido o muerto no significa nada, y dejarlo pasar sería falsear el
+ * registro sin que nadie se entere.
+ */
+const EXIGE_ACTIVO: TipoLote[] = ['Venta', 'Traslado', 'Baja'];
+
+const enumerar = (crotales: string[]) =>
+  crotales.length > 4
+    ? `${crotales.slice(0, 4).join(', ')} y ${crotales.length - 4} más`
+    : crotales.join(', ');
+
+export function aplicarLote(data: FarmData, propuesta: PropuestaLote): FarmData {
+  const { tipo, fecha, notas } = propuesta;
+  const animalIds = [...new Set(propuesta.animalIds)];
+  const destino = propuesta.ubicacionDestino?.trim() ?? '';
+
+  if (!animalIds.length) throw new Error('No has seleccionado ningún animal.');
+  if (fecha > today()) throw new Error('La fecha no puede ser posterior a hoy.');
+  if (tipo === 'Traslado' && !destino)
+    throw new Error('Indica a qué ubicación se traslada el grupo.');
+
+  const porId = new Map(data.animals.map(a => [a.id, a]));
+  const seleccionados = animalIds.map(id => porId.get(id));
+  if (seleccionados.some(a => !a))
+    throw new Error('Alguno de los animales seleccionados ya no existe. Vuelve a elegirlos.');
+  const animales = seleccionados as Animal[];
+
+  if (EXIGE_ACTIVO.includes(tipo)) {
+    const inactivos = animales.filter(a => a.categoria !== 'Activo');
+    if (inactivos.length)
+      throw new Error(
+        `No se puede hacer esto con ganado que ya está de baja: ${enumerar(inactivos.map(a => a.crotal))}.`
+      );
+  }
+
+  /*
+   * Una baja anterior al nacimiento deja la ficha en un estado que no significa
+   * nada. La validación no lo comprueba —solo mira que la fecha no sea futura—,
+   * así que se comprueba aquí, antes de tocar veinte animales de golpe.
+   */
+  const imposibles = animales.filter(a => fecha < a.fechaNacimiento);
+  if (imposibles.length)
+    throw new Error(
+      `Esa fecha es anterior al nacimiento de ${enumerar(imposibles.map(a => a.crotal))}.`
+    );
+
+  const afectados = new Set(animalIds);
+  const cambiar = (a: Animal): Animal => {
+    if (!afectados.has(a.id)) return a;
+    if (tipo === 'Venta') return { ...a, categoria: 'Vendido', fechaBaja: fecha };
+    if (tipo === 'Baja') return { ...a, categoria: 'Muerto', fechaBaja: fecha };
+    if (tipo === 'Traslado') return { ...a, ubicacion: destino };
+    // El destete no cambia la ficha: el hecho lo guarda el propio lote.
+    return a;
+  };
+
+  const lote: Lote = {
+    id: uid(),
+    tipo,
+    fecha,
+    animalIds,
+    ...(tipo === 'Traslado' ? { ubicacionDestino: destino } : {}),
+    ...(notas?.trim() ? { notas: notas.trim() } : {})
+  };
+
+  return { ...data, animals: data.animals.map(cambiar), lotes: [...data.lotes, lote] };
+}
+
+/**
+ * Frase de lo que pasa con el grupo. Se usa dos veces, igual que en la fusión de
+ * copias: antes de decidir, en futuro, y después de hacerlo, en pasado. Leer
+ * «se darán de baja» cuando ya están dados de baja deja la duda de si se pulsó.
+ */
+export function describirLote(
+  propuesta: PropuestaLote,
+  animales: Animal[],
+  antesDeHacerlo = true
+): string {
+  const n = propuesta.animalIds.length;
+  const cuantos = `${n} ${n === 1 ? 'animal' : 'animales'}`;
+  const cuando = dateLabel(propuesta.fecha);
+  const baja = antesDeHacerlo ? 'Se darán de baja' : 'Se han dado de baja';
+  if (propuesta.tipo === 'Venta') return `${baja} ${cuantos} como vendidos el ${cuando}.`;
+  if (propuesta.tipo === 'Baja') return `${baja} ${cuantos} como muertos el ${cuando}.`;
+  if (propuesta.tipo === 'Traslado')
+    return `${antesDeHacerlo ? 'Se moverán' : 'Se han movido'} ${cuantos} a ${propuesta.ubicacionDestino?.trim() || 'la ubicación indicada'}.`;
+  const hembras = animales.filter(a => a.sexo === 'Hembra').length;
+  const sexos = hembras ? ` (${hembras} ${hembras === 1 ? 'hembra' : 'hembras'})` : '';
+  return `${antesDeHacerlo ? 'Se anotará' : 'Se ha anotado'} el destete de ${cuantos} el ${cuando}${sexos}.`;
+}

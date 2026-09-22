@@ -1,4 +1,4 @@
-import type { Animal, FarmData, InvoiceDoc, MilkRecord, WeightRecord } from '../types';
+import type { Animal, FarmData, InvoiceDoc, Lote, MilkRecord, WeightRecord } from '../types';
 import { uid } from '../lib/domain';
 
 /*
@@ -28,6 +28,7 @@ export interface ResumenFusion {
   facturasAnadidas: number;
   ordenosAnadidos: number;
   pesadasAnadidas: number;
+  lotesAnadidos: number;
   /** Registros de la copia que no se han podido encajar y se han dejado fuera. */
   descartados: number;
 }
@@ -38,6 +39,9 @@ const clave = (crotal: string) => crotal.trim().toUpperCase();
 const claveOrdeno = (r: MilkRecord) => [r.fecha, r.ordeno ?? 1, r.animalId ?? ''].join(':');
 const claveOrdenoSinAnimal = (r: MilkRecord) => [r.fecha, r.ordeno ?? 1].join(':');
 const clavePesada = (r: WeightRecord) => r.animalId + ':' + r.fecha;
+/* Un lote no tiene nombre: es el mismo si es la misma operacion, es decir el
+ * mismo tipo, el mismo dia y exactamente los mismos animales. */
+const claveLote = (l: Lote) => [l.tipo, l.fecha, [...l.animalIds].sort().join(',')].join('|');
 /* Una factura no tiene número que valga como identidad, así que se compara por
  * contenido: sirve para no duplicarla si alguien importa dos veces el mismo
  * archivo, que es el descuido más probable. */
@@ -54,6 +58,7 @@ export function fusionarCopia(
     facturasAnadidas: 0,
     ordenosAnadidos: 0,
     pesadasAnadidas: 0,
+    lotesAnadidos: 0,
     descartados: 0
   };
 
@@ -62,7 +67,8 @@ export function fusionarCopia(
     ...actual.animals.map(a => a.id),
     ...actual.invoices.map(f => f.id),
     ...actual.milkRecords.map(r => r.id),
-    ...actual.weightRecords.map(r => r.id)
+    ...actual.weightRecords.map(r => r.id),
+    ...actual.lotes.map(l => l.id)
   ]);
   const libre = (id: string) => {
     if (!idsOcupados.has(id)) {
@@ -182,6 +188,26 @@ export function fusionarCopia(
     resumen.pesadasAnadidas++;
   }
 
+  /*
+   * Los lotes se traen con los miembros que resuelvan. Un destete de veinte
+   * corderos del que solo encajan doce sigue siendo ese destete, y perderlo
+   * entero seria peor; los que no encajan se cuentan como descartados. Si no
+   * resuelve ninguno, el lote no tiene contenido y se deja fuera: la validacion
+   * rechaza un lote vacio.
+   */
+  const lotesVistos = new Set(actual.lotes.map(claveLote));
+  const lotes = [...actual.lotes];
+  for (const l of entrante.lotes) {
+    const animalIds = l.animalIds.map(id => equivalencia.get(id)).filter((x): x is string => !!x);
+    resumen.descartados += l.animalIds.length - animalIds.length;
+    if (!animalIds.length) continue;
+    const resuelto = { ...l, animalIds: [...new Set(animalIds)] };
+    if (lotesVistos.has(claveLote(resuelto))) continue;
+    lotesVistos.add(claveLote(resuelto));
+    lotes.push({ ...resuelto, id: libre(l.id) });
+    resumen.lotesAnadidos++;
+  }
+
   return {
     datos: {
       // La explotación y la plantilla de factura son suyas: la copia no las pisa.
@@ -191,7 +217,8 @@ export function fusionarCopia(
       animals: conCrias,
       invoices,
       milkRecords,
-      weightRecords
+      weightRecords,
+      lotes
     },
     resumen
   };
@@ -209,6 +236,7 @@ export function describirFusion(r: ResumenFusion, antesDeHacerlo = false): strin
   if (r.facturasAnadidas) partes.push(plural(r.facturasAnadidas, 'factura', 'facturas'));
   if (r.ordenosAnadidos) partes.push(plural(r.ordenosAnadidos, 'ordeño', 'ordeños'));
   if (r.pesadasAnadidas) partes.push(plural(r.pesadasAnadidas, 'pesada', 'pesadas'));
+  if (r.lotesAnadidos) partes.push(plural(r.lotesAnadidos, 'lote', 'lotes'));
 
   if (!partes.length && !r.animalesYaEstaban) return 'La copia no traía nada que añadir.';
   const anadido = partes.length

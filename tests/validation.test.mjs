@@ -131,19 +131,48 @@ test('un rebaño de 235 fichas en formato viejo se lee entero: no se descarta ni
       invoices: [],
       saleTemplate: plantillaVacia,
       milkRecords: [],
-      weightRecords: []
+      weightRecords: [],
+      lotes: []
     }
   };
 
   const resultado = parseBackup(backup);
   assert.equal(resultado.data.animals.length, 235, 'ninguna ficha se pierde en la migración');
-  assert.equal(
-    resultado.data.animals.filter(a => a.categoria === 'Activo').length,
-    235 - bajas
-  );
+  assert.equal(resultado.data.animals.filter(a => a.categoria === 'Activo').length, 235 - bajas);
   assert.equal(resultado.data.animals.filter(a => a.categoria === 'Vendido').length, vendidas);
   assert.equal(
     resultado.data.animals.filter(a => a.categoria === 'Muerto').length,
     bajas - vendidas
   );
+});
+
+test('una copia de seguridad anterior a los lotes se sigue pudiendo restaurar', () => {
+  /*
+   * Los lotes llegaron despues. Exigirlos dejaria al ganadero sin poder
+   * recuperar una copia hecha la semana pasada, que es justo cuando mas falta
+   * hace: cuando ha perdido los datos.
+   */
+  const backup = {
+    format: 'chaparra',
+    version: 2,
+    exportedAt: '2026-09-01T10:00:00.000Z',
+    account: { nombre: 'Javier', email: 'javier@ejemplo.es' },
+    data: {
+      farm: {
+        nombreExplotacion: 'La Cerquilla',
+        titular: 'Javier',
+        especies: ['Ovino'],
+        orientacionPorEspecie: { Ovino: 'Carne' },
+        moneda: 'EUR'
+      },
+      animals: [],
+      invoices: [],
+      saleTemplate: plantillaVacia,
+      milkRecords: [],
+      weightRecords: []
+      // sin `lotes`, como las copias de antes
+    }
+  };
+  const resultado = parseBackup(backup);
+  assert.deepEqual(resultado.data.lotes, [], 'se dan por vacios en vez de rechazar la copia');
 });

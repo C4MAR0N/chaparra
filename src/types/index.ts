@@ -149,6 +149,29 @@ export interface SaleInvoiceTemplate {
   fechaOperacion: string;
   notasPie?: string;
 }
+/*
+ * Un lote es lo que le pasa a un grupo de animales el mismo día: el destete de
+ * veinte corderos, la venta de diez añojos, el traslado de un cercado a otro.
+ *
+ * Se guarda como hecho propio, con su fecha y sus miembros, en vez de anotarlo
+ * animal por animal: el ganadero no piensa «la 1042 se destetó el 2 de
+ * octubre», piensa «el destete del 2 de octubre», y quiere volver a ese día y
+ * verlo entero.
+ *
+ * El lote no duplica lo que ya dice la ficha. Una venta deja al animal en
+ * 'Vendido' con su fecha de baja, como si se hubiera hecho de uno en uno; el
+ * lote solo recuerda que aquello fue una misma operación.
+ */
+export type TipoLote = 'Destete' | 'Venta' | 'Traslado' | 'Baja';
+export interface Lote {
+  id: string;
+  tipo: TipoLote;
+  fecha: string;
+  animalIds: string[];
+  /** Solo en los traslados: el cercado al que se ha movido el grupo. */
+  ubicacionDestino?: string;
+  notas?: string;
+}
 export interface FarmData {
   farm: FarmProfile | null;
   animals: Animal[];
@@ -156,6 +179,7 @@ export interface FarmData {
   saleTemplate: SaleInvoiceTemplate;
   milkRecords: MilkRecord[];
   weightRecords: WeightRecord[];
+  lotes: Lote[];
 }
 export interface Backup {
   format: 'chaparra';

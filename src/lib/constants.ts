@@ -3,7 +3,8 @@ import type {
   Especie,
   EstadoSanitario,
   InvoiceCategory,
-  Orientacion
+  Orientacion,
+  TipoLote
 } from '../types';
 export const ESPECIES: Especie[] = [
   'Vacuno',
@@ -107,3 +108,36 @@ export const PROVINCIAS = [
   'Zaragoza'
 ];
 export const especieLabel = (especie: Especie) => (especie === 'Avicola' ? 'Avícola' : especie);
+/*
+ * Los cuatro tipos de lote, con lo que hay que enseñar en pantalla. El `efecto`
+ * es la frase que el ganadero lee ANTES de confirmar: una venta de diez añojos
+ * los da de baja de golpe, y eso tiene que estar dicho con todas las letras.
+ */
+export const TIPOS_LOTE: {
+  tipo: TipoLote;
+  titulo: string;
+  efecto: string;
+}[] = [
+  {
+    tipo: 'Destete',
+    titulo: 'Destete',
+    efecto: 'Quedan registrados como destetados ese día. No cambia nada más de su ficha.'
+  },
+  {
+    tipo: 'Venta',
+    titulo: 'Venta',
+    efecto: 'Pasan a «Vendido» y se les pone esa fecha de baja. Dejan de contar como activos.'
+  },
+  {
+    tipo: 'Traslado',
+    titulo: 'Traslado de ubicación',
+    efecto: 'Se les cambia la ubicación a la de destino. Siguen activos.'
+  },
+  {
+    tipo: 'Baja',
+    titulo: 'Baja por muerte',
+    efecto: 'Pasan a «Muerto» y se les pone esa fecha de baja. Dejan de contar como activos.'
+  }
+];
+export const tipoLoteLabel = (tipo: TipoLote) =>
+  TIPOS_LOTE.find(t => t.tipo === tipo)?.titulo ?? tipo;

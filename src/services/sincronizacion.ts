@@ -20,7 +20,8 @@ import { migrarAnimalGuardado } from '../lib/validation';
  * ganadero y dos dispositivos, el caso es raro.
  */
 
-export type Tipo = 'explotacion' | 'animal' | 'factura' | 'plantilla' | 'ordeno' | 'pesada';
+export type Tipo =
+  'explotacion' | 'animal' | 'factura' | 'plantilla' | 'ordeno' | 'pesada' | 'lote';
 
 export interface Registro {
   tipo: Tipo;
@@ -65,6 +66,7 @@ export function aplanar(data: FarmData, metas: Metas): Registro[] {
   for (const f of data.invoices) meter('factura', f.id, f);
   for (const r of data.milkRecords) meter('ordeno', r.id, r);
   for (const r of data.weightRecords) meter('pesada', r.id, r);
+  for (const l of data.lotes) meter('lote', l.id, l);
 
   // Las lápidas no están en los datos, pero tienen que viajar.
   for (const [k, m] of Object.entries(metas)) {
@@ -101,7 +103,8 @@ export function reconstruir(registros: Registro[], base: FarmData): FarmData {
     ),
     invoices: muchos<FarmData['invoices'][number]>('factura'),
     milkRecords: muchos<FarmData['milkRecords'][number]>('ordeno'),
-    weightRecords: muchos<FarmData['weightRecords'][number]>('pesada')
+    weightRecords: muchos<FarmData['weightRecords'][number]>('pesada'),
+    lotes: muchos<FarmData['lotes'][number]>('lote')
   };
 }
 

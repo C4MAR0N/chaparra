@@ -9,7 +9,7 @@ import {
   ultimoCambio
 } from '../src/services/sincronizacion.ts';
 
-const t = (min) => new Date(Date.UTC(2026, 8, 17, 10, min)).toISOString();
+const t = min => new Date(Date.UTC(2026, 8, 17, 10, min)).toISOString();
 
 const reg = (tipo, id, datos, actualizado, borrado = false) => ({
   tipo,
@@ -25,14 +25,18 @@ const VACIA = {
   invoices: [],
   saleTemplate: { numeroFactura: '' },
   milkRecords: [],
-  weightRecords: []
+  weightRecords: [],
+  lotes: []
 };
 
 test('descompone la explotación en registros independientes', () => {
   const data = {
     ...VACIA,
     farm: { nombreExplotacion: 'La Cerquilla' },
-    animals: [{ id: 'a1', crotal: 'ES1' }, { id: 'a2', crotal: 'ES2' }],
+    animals: [
+      { id: 'a1', crotal: 'ES1' },
+      { id: 'a2', crotal: 'ES2' }
+    ],
     invoices: [{ id: 'f1' }]
   };
   const metas = { [clave('animal', 'a1')]: { actualizado: t(5) } };
@@ -136,7 +140,8 @@ test('ida y vuelta: aplanar y reconstruir conserva la explotación', () => {
     invoices: [{ id: 'f1' }],
     saleTemplate: { numeroFactura: 'FAC-1' },
     milkRecords: [{ id: 'o1' }],
-    weightRecords: [{ id: 'p1' }]
+    weightRecords: [{ id: 'p1' }],
+    lotes: [{ id: 'l1' }]
   };
   const vuelta = reconstruir(aplanar(data, {}), VACIA);
   assert.deepEqual(vuelta, data);

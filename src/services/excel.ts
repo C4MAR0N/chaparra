@@ -1,6 +1,6 @@
 import type { Animal, FarmData, FarmProfile, UserRecord } from '../types';
 import { crearLibro, type Sheet } from '../lib/xlsx';
-import { CATEGORIAS_ANIMAL, especieLabel } from '../lib/constants';
+import { CATEGORIAS_ANIMAL, especieLabel, tipoLoteLabel } from '../lib/constants';
 import { age, today } from '../lib/domain';
 
 /*
@@ -85,6 +85,43 @@ function hojaSanidad(data: FarmData): Sheet {
   };
 }
 
+/*
+ * Una fila por animal y lote, no una fila por lote con los crotales apelotonados
+ * en una celda. Así el veterinario puede filtrar por fecha o por tipo en el
+ * propio Excel, que es para lo que sirve un Excel.
+ */
+function hojaLotes(data: FarmData): Sheet {
+  const porId = new Map(data.animals.map(a => [a.id, a]));
+  const rows = data.lotes
+    .flatMap(lote =>
+      lote.animalIds.map(id => [
+        lote.fecha,
+        tipoLoteLabel(lote.tipo),
+        porId.get(id)?.crotal ?? null,
+        lote.ubicacionDestino ?? null,
+        lote.notas ?? null
+      ])
+    )
+    .filter(fila => fila[2] !== null);
+  rows.sort(
+    (a, b) =>
+      String(b[0]).localeCompare(String(a[0])) ||
+      String(a[2]).localeCompare(String(b[2]), 'es', { numeric: true })
+  );
+
+  return {
+    name: 'Lotes',
+    columns: [
+      { header: 'Fecha', type: 'date' },
+      { header: 'Operación', type: 'text' },
+      { header: 'Crotal', type: 'text' },
+      { header: 'Ubicación de destino', type: 'text' },
+      { header: 'Notas', type: 'text' }
+    ],
+    rows
+  };
+}
+
 function hojaResumen(user: UserRecord, data: FarmData, farm: FarmProfile, ambito: string): Sheet {
   const filas: [string, string | number][] = [
     ['Explotación', farm.nombreExplotacion],
@@ -128,7 +165,15 @@ export function acotar(data: FarmData, animales: Animal[]): FarmData {
     milkRecords: data.milkRecords.filter(r => r.animalId && ids.has(r.animalId)),
     weightRecords: data.weightRecords.filter(r => ids.has(r.animalId)),
     // Las facturas no se llevan por cercado: solo viajan las que citan crotales.
-    invoices: data.invoices.filter(f => (f.crotalesRelacionados ?? []).some(c => crotales.has(c)))
+    invoices: data.invoices.filter(f => (f.crotalesRelacionados ?? []).some(c => crotales.has(c))),
+    /*
+     * De un lote solo viaja la parte que cae dentro de lo exportado. Si se saca
+     * el cercado del Pantano, el destete que mezclaba Pantano y Virgen aparece
+     * con los corderos del Pantano, no con los de la Virgen.
+     */
+    lotes: data.lotes
+      .map(l => ({ ...l, animalIds: l.animalIds.filter(id => ids.has(id)) }))
+      .filter(l => l.animalIds.length)
   };
 }
 
@@ -143,6 +188,7 @@ export function descargarExcel(user: UserRecord, data: FarmData, ambito?: Ambito
 
   const hojas: Sheet[] = [hojaResumen(user, alcance, farm, etiqueta), hojaRebano(alcance)];
   if (alcance.animals.some(a => a.historialSanitario.length)) hojas.push(hojaSanidad(alcance));
+  if (alcance.lotes.length) hojas.push(hojaLotes(alcance));
 
   const blob = crearLibro(hojas);
   const url = URL.createObjectURL(blob);

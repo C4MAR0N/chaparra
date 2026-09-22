@@ -5,6 +5,7 @@ import type {
   FarmProfile,
   HealthRecord,
   InvoiceDoc,
+  Lote,
   MilkRecord,
   SaleInvoiceTemplate,
   WeightRecord
@@ -15,7 +16,8 @@ import {
   ESPECIES,
   ESTADOS,
   ORIENTACIONES,
-  PROVINCIAS
+  PROVINCIAS,
+  TIPOS_LOTE
 } from './constants';
 import { today } from './domain';
 export const object = (v: unknown): v is Record<string, unknown> =>
@@ -228,9 +230,30 @@ export function isInvoice(v: unknown): v is InvoiceDoc {
     optional(v.documentoVenta, isSaleTemplate)
   );
 }
+export function isLote(v: unknown): v is Lote {
+  return (
+    object(v) &&
+    nonempty(v.id) &&
+    oneOf(
+      v.tipo,
+      TIPOS_LOTE.map(t => t.tipo)
+    ) &&
+    pastDate(v.fecha) &&
+    strings(v.animalIds) &&
+    v.animalIds.length > 0 &&
+    new Set(v.animalIds).size === v.animalIds.length &&
+    optional(v.ubicacionDestino, str) &&
+    optional(v.notas, str)
+  );
+}
 export const arrayOf = <T>(v: unknown, check: (row: unknown) => row is T): v is T[] =>
   Array.isArray(v) && v.length <= 100000 && v.every(check);
 export function isFarmData(v: unknown): v is FarmData {
+  /*
+   * Los lotes llegaron después. Una copia de seguridad de antes no los trae, y
+   * exigirlos dejaría al ganadero sin poder restaurarla: se dan por vacíos.
+   */
+  if (object(v) && v.lotes === undefined) v.lotes = [];
   if (
     !object(v) ||
     !(v.farm === null || isFarm(v.farm)) ||
@@ -238,14 +261,17 @@ export function isFarmData(v: unknown): v is FarmData {
     !arrayOf(v.invoices, isInvoice) ||
     !isSaleTemplate(v.saleTemplate) ||
     !arrayOf(v.milkRecords, isMilk) ||
-    !arrayOf(v.weightRecords, isWeight)
+    !arrayOf(v.weightRecords, isWeight) ||
+    !arrayOf(v.lotes, isLote)
   )
     return false;
   const animals = v.animals;
   const milk = v.milkRecords;
   const ids = new Set(animals.map(a => a.id));
   return (
-    [animals, v.invoices, v.milkRecords, v.weightRecords].every(uniqueIds) &&
+    [animals, v.invoices, v.milkRecords, v.weightRecords, v.lotes].every(uniqueIds) &&
+    // Un lote que cita animales que ya no existen no se puede volver a abrir.
+    v.lotes.every(l => l.animalIds.every(id => ids.has(id))) &&
     new Set(animals.map(a => a.crotal.trim().toUpperCase())).size === animals.length &&
     animals.every(a => a.criasAsociadas.every(id => id !== a.id && ids.has(id))) &&
     v.weightRecords.every(r => ids.has(r.animalId)) &&

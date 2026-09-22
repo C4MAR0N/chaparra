@@ -214,8 +214,8 @@ export async function changePassword(userId: string, current: string, next: stri
   );
 }
 export function deleteUser(userId: string) {
-  ['farm', 'animals', 'invoices', 'saleTemplate', 'milkRecords', 'weightRecords'].forEach(key =>
-    writeRaw(`chaparra:v2:u:${userId}:${key}`, null)
+  ['farm', 'animals', 'invoices', 'saleTemplate', 'milkRecords', 'weightRecords', 'lotes'].forEach(
+    key => writeRaw(`chaparra:v2:u:${userId}:${key}`, null)
   );
   writeJson(
     USERS_KEY,

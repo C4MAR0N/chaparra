@@ -18,6 +18,7 @@ import {
   weightStats
 } from '../lib/domain';
 import { CATEGORIAS_ANIMAL, ESTADOS, especieLabel } from '../lib/constants';
+import { etiquetaLote, lotesDeAnimal } from '../services/lotes';
 import {
   Badge,
   Banner,
@@ -63,6 +64,7 @@ export function AnimalDetailModal({
   const milk = data.milkRecords
     .filter(r => r.animalId === animal.id)
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const misLotes = lotesDeAnimal(data.lotes, animal.id);
   const stats = weightStats(animal, data.weightRecords);
   const value =
     animal.precioEstimadoVentaEuro ??
@@ -215,6 +217,28 @@ export function AnimalDetailModal({
           </p>
         )}
       </section>
+      {/* Lo que le ha pasado a este animal junto a otros. Sin esto, «¿cuándo se
+          destetó esta?» obligaría a repasar los lotes uno por uno. */}
+      {misLotes.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="section-heading">Operaciones en grupo</h3>
+          <ul className="space-y-2">
+            {misLotes.map(l => (
+              <li
+                key={l.id}
+                className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-stone-200 px-3 py-2 text-sm"
+              >
+                <span className="font-semibold">{etiquetaLote(l)}</span>
+                <span className="text-stone-600">
+                  Con {l.animalIds.length - 1}{' '}
+                  {l.animalIds.length - 1 === 1 ? 'animal más' : 'animales más'}
+                  {l.ubicacionDestino ? ` · a ${l.ubicacionDestino}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="section-heading">Historial sanitario</h3>

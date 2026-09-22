@@ -4,6 +4,7 @@ import {
   isAnimal,
   isFarm,
   isInvoice,
+  isLote,
   isMilk,
   isSaleTemplate,
   isWeight
@@ -66,7 +67,8 @@ export function loadData(userId: string): FarmData {
       'weightRecords',
       (v): v is FarmData['weightRecords'] => arrayOf(v, isWeight),
       []
-    )
+    ),
+    lotes: read(userId, 'lotes', (v): v is FarmData['lotes'] => arrayOf(v, isLote), [])
   };
 }
 export function saveData<K extends keyof FarmData>(userId: string, kind: K, value: FarmData[K]) {

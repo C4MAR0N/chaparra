@@ -34,7 +34,30 @@ async function aemet(ruta) {
   if (!sobre.datos) throw new Error(`AEMET no ha devuelto URL de datos en ${ruta}`);
   const datos = await fetch(sobre.datos);
   if (!datos.ok) throw new Error(`No se han podido descargar los datos de ${ruta}`);
-  return JSON.parse(await datos.text());
+  return leerJson(datos, ruta);
+}
+
+/*
+ * AEMET sirve los ficheros de datos en ISO-8859-15, no en UTF-8, y lo declara
+ * en la cabecera. `text()` da por hecho UTF-8, así que «Ávila» llegaría como
+ * texto roto y el nombre del municipio dejaría de encajar con el que pide el
+ * ganadero. Se decodifica con el juego que anuncia la propia respuesta.
+ */
+async function leerJson(res, ruta) {
+  const juego =
+    /charset=([^;]+)/i.exec(res.headers.get('content-type') ?? '')?.[1]?.trim() || 'utf-8';
+  const crudo = await res.arrayBuffer();
+  let texto;
+  try {
+    texto = new TextDecoder(juego).decode(crudo);
+  } catch {
+    texto = new TextDecoder('iso-8859-15').decode(crudo);
+  }
+  try {
+    return JSON.parse(texto);
+  } catch (e) {
+    throw new Error(`Respuesta ilegible de AEMET en ${ruta}: ${e.message}`);
+  }
 }
 
 /*
@@ -44,28 +67,52 @@ async function aemet(ruta) {
  */
 const DIACRITICOS = new RegExp('[\u0300-\u036f]', 'g');
 
-const sinAcentos = t =>
-  t
-    .normalize('NFD')
-    .replace(DIACRITICOS, '')
-    .toLowerCase()
-    .trim();
+const sinAcentos = t => t.normalize('NFD').replace(DIACRITICOS, '').toLowerCase().trim();
+
+// El id viene como "id28079"; AEMET espera los 5 dígitos.
+const cincoDigitos = c =>
+  String(c ?? '')
+    .replace(/\D/g, '')
+    .padStart(5, '0');
+
+/*
+ * El maestro no llama siempre igual al campo de la provincia. Comparar solo
+ * contra `nombre_provincia` hacía que la condición fallara en todas las
+ * entradas, no encajara ningún municipio y el índice saliera vacío, con el
+ * proceso terminando en verde. Se prueban los nombres que AEMET ha ido usando.
+ */
+const provinciaDe = x => x.nombre_provincia ?? x.provincia ?? x.NOMBRE_PROVINCIA ?? '';
 
 async function resolverCodigos(deseados) {
+  // Lo que ya trae su código INE no hay que adivinarlo, ni gastar una llamada.
+  if (deseados.every(m => m.codigo))
+    return deseados.map(m => ({ ...m, codigo: cincoDigitos(m.codigo) }));
+
   const maestro = await aemet('/maestro/municipios');
   return deseados.map(m => {
+    if (m.codigo) return { ...m, codigo: cincoDigitos(m.codigo) };
     const encontrado = maestro.find(
       x =>
         sinAcentos(x.nombre) === sinAcentos(m.nombre) &&
-        (!m.provincia || sinAcentos(x.nombre_provincia ?? '') === sinAcentos(m.provincia))
+        (!m.provincia || sinAcentos(provinciaDe(x)) === sinAcentos(m.provincia))
     );
     if (!encontrado) {
-      console.warn(`No se ha encontrado en AEMET: ${m.nombre} (${m.provincia ?? 'sin provincia'})`);
+      /*
+       * Decir solo «no encontrado» obliga a adivinar. Se listan los nombres
+       * parecidos con su provincia y su id, que es justo lo que hay que copiar
+       * a tiempo-municipios.json para resolverlo.
+       */
+      const parecidos = maestro
+        .filter(x => sinAcentos(x.nombre).startsWith(sinAcentos(m.nombre).slice(0, 4)))
+        .slice(0, 5)
+        .map(x => `${x.nombre} (${provinciaDe(x) || 'sin provincia'}) ${x.id}`);
+      console.warn(
+        `No se ha encontrado en AEMET: ${m.nombre} (${m.provincia ?? 'sin provincia'}).` +
+          (parecidos.length ? ` Parecidos: ${parecidos.join('; ')}` : ' Ningún nombre parecido.')
+      );
       return null;
     }
-    // El id viene como "id28079"; AEMET espera los 5 dígitos.
-    const codigo = String(encontrado.id ?? '').replace(/\D/g, '').padStart(5, '0');
-    return { ...m, codigo, nombreAemet: encontrado.nombre };
+    return { ...m, codigo: cincoDigitos(encontrado.id), nombreAemet: encontrado.nombre };
   });
 }
 
@@ -105,9 +152,7 @@ async function municipio({ codigo, nombre, provincia }) {
   const dias = (diaria?.prediccion?.dia ?? []).slice(0, 7).map(d => {
     const fecha = String(d.fecha).slice(0, 10);
     // El periodo "00-24" es el resumen del día; si no está, se toma el máximo.
-    const probs = (d.probPrecipitacion ?? [])
-      .map(p => Number(p.value))
-      .filter(Number.isFinite);
+    const probs = (d.probPrecipitacion ?? []).map(p => Number(p.value)).filter(Number.isFinite);
     const cielo = (d.estadoCielo ?? []).find(c => c.descripcion)?.descripcion ?? '';
     return {
       fecha,
@@ -147,3 +192,16 @@ for (const m of resueltos) {
 }
 await writeFile(path.join(SALIDA, 'indice.json'), JSON.stringify(indice), 'utf8');
 console.log(`Índice con ${indice.length} municipios.`);
+
+/*
+ * Un índice vacío significa que la app se queda sin previsión, pero hasta ahora
+ * el proceso terminaba en verde y nadie se enteraba: durante días publicó un
+ * `[]` sin una sola señal. Si se pidieron municipios y no ha salido ninguno, es
+ * un fallo, y tiene que verse como tal.
+ */
+if (deseados.length && !indice.length) {
+  console.error(
+    `Se pidieron ${deseados.length} municipios y no se ha resuelto ninguno: la app se quedaría sin previsión.`
+  );
+  process.exitCode = 1;
+}

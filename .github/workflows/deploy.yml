@@ -4,6 +4,13 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+  # GitHub no dispara workflows con los commits que hace el propio GITHUB_TOKEN:
+  # es su proteccion contra bucles infinitos. Sin esto, la prevision de AEMET se
+  # guardaba en el repositorio cuatro veces al dia y no se publicaba nunca, asi
+  # que la app seguia sirviendo la del ultimo empujon hecho a mano.
+  workflow_run:
+    workflows: ['Previsión de AEMET']
+    types: [completed]
 
 permissions:
   contents: read
@@ -17,6 +24,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # workflow_run tambien salta cuando la prevision ha fallado, y entonces no
+    # hay nada nuevo que publicar.
+    if: >-
+      ${{ github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
 

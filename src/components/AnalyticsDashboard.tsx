@@ -18,6 +18,7 @@ import {
   esSalida
 } from '../lib/domain';
 import { especieLabel } from '../lib/constants';
+import { animalesEnLotes } from '../services/lotes';
 import type { Especie, MilkRecord } from '../types';
 import { Button, Card, EmptyState, Field, Input, SegmentedControl, StatTile } from './ui';
 import { DataChart, SeriesChart } from './Charts';
@@ -107,6 +108,22 @@ export function AnalyticsDashboard() {
   );
   const dias = rangoValido ? daysBetween(desde, hasta) + 1 : 0;
   const manadas = useMemo(() => porUbicacion(animales), [animales]);
+  /*
+   * Los destetes salen de los lotes, no de las fichas. Una cría destetada el 2
+   * y vendida el 10 acaba con la categoría 'Vendido' y una sola fecha de baja:
+   * en las fichas el destete ya no existe, y sin embargo pasó.
+   */
+  const destetes = useMemo(
+    () =>
+      animalesEnLotes(
+        data.lotes,
+        'Destete',
+        f => enRango(f),
+        especie ? new Set(animales.map(a => a.id)) : undefined
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.lotes, animales, especie, desde, hasta, rangoValido]
+  );
   /* Una gráfica de una sola barra no informa de nada: si la explotación tiene
    * una especie, el reparto por especie sobra. */
   const variasEspecies = new Set(active.map(a => a.especie)).size > 1;
@@ -201,6 +218,11 @@ export function AnalyticsDashboard() {
           label="Muertes del periodo"
           value={animales.filter(a => enRango(a.fechaBaja) && esMuerte(a)).length}
           help="Incluye los nacidos muertos."
+        />
+        <StatTile
+          label="Destetes del periodo"
+          value={destetes.animales}
+          help={`Crías destetadas en ${destetes.operaciones} ${destetes.operaciones === 1 ? 'operación' : 'operaciones'}. Sale de los lotes, así que cuenta aunque se vendieran después.`}
         />
         {hasMeat(farm) && (
           <StatTile

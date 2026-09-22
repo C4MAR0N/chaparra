@@ -145,3 +145,34 @@ export function describirLote(
   const sexos = hembras ? ` (${hembras} ${hembras === 1 ? 'hembra' : 'hembras'})` : '';
   return `${baja} ${cuantos} como destetados el ${cuando}${sexos}.`;
 }
+
+/*
+ * Cuántos animales pasaron por una operación dentro de un periodo.
+ *
+ * Esto no se puede sacar de las fichas. Una cría que se desteta el 2 y se vende
+ * el 10 acaba con la categoría 'Vendido' y una sola fecha de baja: el destete
+ * desaparece de su ficha y en los informes cuenta como una venta y nada más. El
+ * único sitio donde queda constancia de que hubo un destete es el lote.
+ *
+ * Con `soloEstos` se acota a una especie, porque un lote puede mezclar animales
+ * de varias y la pantalla de informes se filtra por especie.
+ */
+export function animalesEnLotes(
+  lotes: Lote[],
+  tipo: TipoLote,
+  dentroDelPeriodo: (fecha: string) => boolean,
+  soloEstos?: Set<string>
+): { operaciones: number; animales: number } {
+  const vistos = new Set<string>();
+  let operaciones = 0;
+  for (const lote of lotes) {
+    if (lote.tipo !== tipo || !dentroDelPeriodo(lote.fecha)) continue;
+    const suyos = soloEstos ? lote.animalIds.filter(id => soloEstos.has(id)) : lote.animalIds;
+    if (!suyos.length) continue;
+    operaciones++;
+    // Distintos: el mismo animal no debe contar dos veces si algún día
+    // apareciera en dos operaciones del mismo tipo dentro del periodo.
+    for (const id of suyos) vistos.add(id);
+  }
+  return { operaciones, animales: vistos.size };
+}

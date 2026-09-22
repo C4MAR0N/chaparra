@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { aplicarLote, describirLote, etiquetaLote, animalesDelLote, lotesDeAnimal, esPrevisto } =
-  await import('../src/services/lotes.ts');
+const {
+  aplicarLote,
+  describirLote,
+  etiquetaLote,
+  animalesDelLote,
+  lotesDeAnimal,
+  esPrevisto,
+  animalesEnLotes
+} = await import('../src/services/lotes.ts');
 const { isFarmData } = await import('../src/lib/validation.ts');
 const { esActivo } = await import('../src/lib/domain.ts');
 
@@ -388,4 +395,60 @@ test('un animal solo se cuenta en singular', () => {
     describirLote({ tipo: 'Venta', fecha: FECHA, animalIds: ['id-ES1'] }, uno),
     /1 animal como/
   );
+});
+
+/*
+ * Los destetes del periodo.
+ *
+ * Es la unica cuenta que no se puede sacar de las fichas: una cria destetada y
+ * vendida despues solo conserva la venta, asi que el destete solo consta en el
+ * lote. Si esto se rompiera, el informe diria que no hubo destetes.
+ */
+const enTodoElAno = f => f >= '2026-01-01' && f <= '2026-12-31';
+
+test('los destetes del periodo se cuentan aunque despues se vendieran', () => {
+  const lotes = [
+    { id: 'l1', tipo: 'Destete', fecha: '2026-09-02', animalIds: ['a1', 'a2', 'a3'] },
+    { id: 'l2', tipo: 'Venta', fecha: '2026-09-10', animalIds: ['a1', 'a2', 'a3'] }
+  ];
+  const r = animalesEnLotes(lotes, 'Destete', enTodoElAno);
+  assert.equal(r.animales, 3, 'la venta posterior no borra el destete');
+  assert.equal(r.operaciones, 1);
+});
+
+test('solo cuenta el tipo pedido y solo dentro del periodo', () => {
+  const lotes = [
+    { id: 'l1', tipo: 'Destete', fecha: '2025-06-01', animalIds: ['a1'] },
+    { id: 'l2', tipo: 'Destete', fecha: '2026-06-01', animalIds: ['a2', 'a3'] },
+    { id: 'l3', tipo: 'Venta', fecha: '2026-06-02', animalIds: ['a4'] }
+  ];
+  const r = animalesEnLotes(lotes, 'Destete', enTodoElAno);
+  assert.equal(r.animales, 2, 'ni el del año pasado ni la venta');
+  assert.equal(r.operaciones, 1);
+});
+
+test('se puede acotar a una especie, que un lote puede mezclarlas', () => {
+  const lotes = [
+    { id: 'l1', tipo: 'Destete', fecha: '2026-06-01', animalIds: ['ovino1', 'vacuno1'] }
+  ];
+  const soloOvino = new Set(['ovino1']);
+  assert.deepEqual(animalesEnLotes(lotes, 'Destete', enTodoElAno, soloOvino), {
+    operaciones: 1,
+    animales: 1
+  });
+  const soloCaprino = new Set(['caprino1']);
+  assert.deepEqual(animalesEnLotes(lotes, 'Destete', enTodoElAno, soloCaprino), {
+    operaciones: 0,
+    animales: 0
+  });
+});
+
+test('un animal que apareciera en dos destetes del periodo cuenta una vez', () => {
+  const lotes = [
+    { id: 'l1', tipo: 'Destete', fecha: '2026-06-01', animalIds: ['a1'] },
+    { id: 'l2', tipo: 'Destete', fecha: '2026-07-01', animalIds: ['a1', 'a2'] }
+  ];
+  const r = animalesEnLotes(lotes, 'Destete', enTodoElAno);
+  assert.equal(r.animales, 2);
+  assert.equal(r.operaciones, 2);
 });

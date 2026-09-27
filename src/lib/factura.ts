@@ -93,7 +93,7 @@ const LINEA_DE_DINERO =
   /base|imponible|iva|i\.v\.a|igic|impuesto|subtotal|sub-total|total|importe/i;
 /* Unidades que delatan una cantidad que NO es dinero aunque lleve decimales:
  * «42,98 Litros» en un ticket de gasolinera es mayor que el total en euros. */
-const LINEA_DE_MEDIDA = /(litros?|ltr|kg|kilos?|uds?|unidades?|cantidad|qte|cant\.)/i;
+const LINEA_DE_MEDIDA = /\b(litros?|ltr|kg|kilos?|uds?|unidades?|cantidad|qte|cant\.)\b/i;
 
 function buscarImporte(lineas: string[]): number | undefined {
   /*

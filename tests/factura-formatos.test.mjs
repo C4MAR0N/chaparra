@@ -296,3 +296,26 @@ test('«Número de factura» no se toma por el nombre del proveedor', () => {
   );
   assert.equal(s.proveedor, 'COMERCIAL DE EJEMPLO S.L.');
 });
+
+test('una línea de litros con la palabra «total» no cuenta como dinero', () => {
+  /*
+   * Encontrado por casualidad: la expresión que reconoce las líneas de medida
+   * llevaba el carácter de retroceso en lugar de «\b», porque un script lo
+   * escribió interpretando la barra. Nunca coincidía con nada, así que «Total
+   * litros: 620,00» entraba como dinero, y el total de verdad, más pequeño, se
+   * rechazaba por incoherente. Un surtidor cualquiera lo imprime así.
+   */
+  const s = interpretarFactura(
+    [
+      'ESTACIÓN DE SERVICIO LA DEHESA S.L.',
+      'Fecha 12-08-2026',
+      'GASÓLEO B AGRÍCOLA',
+      'Total litros: 620,00',
+      'Base 460,64',
+      'IVA 21% 96,74',
+      'TOTAL: 557,38 €'
+    ].join('\n'),
+    HOY
+  );
+  assert.equal(s.importeTotalEuro, 557.38);
+});

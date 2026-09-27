@@ -2,6 +2,7 @@ import type { Animal, FarmData, FarmProfile, UserRecord } from '../types';
 import { crearLibro, type Sheet } from '../lib/xlsx';
 import { CATEGORIAS_ANIMAL, especieLabel, tipoLoteLabel } from '../lib/constants';
 import { age, today } from '../lib/domain';
+import { esOperacion } from './lotes';
 
 /*
  * Exportación a Excel: el papel que el ganadero le da al veterinario o a la
@@ -93,6 +94,7 @@ function hojaSanidad(data: FarmData): Sheet {
 function hojaLotes(data: FarmData): Sheet {
   const porId = new Map(data.animals.map(a => [a.id, a]));
   const rows = data.lotes
+    .filter(esOperacion)
     .flatMap(lote =>
       lote.animalIds.map(id => [
         lote.fecha,
@@ -188,7 +190,7 @@ export function descargarExcel(user: UserRecord, data: FarmData, ambito?: Ambito
 
   const hojas: Sheet[] = [hojaResumen(user, alcance, farm, etiqueta), hojaRebano(alcance)];
   if (alcance.animals.some(a => a.historialSanitario.length)) hojas.push(hojaSanidad(alcance));
-  if (alcance.lotes.length) hojas.push(hojaLotes(alcance));
+  if (alcance.lotes.some(esOperacion)) hojas.push(hojaLotes(alcance));
 
   const blob = crearLibro(hojas);
   const url = URL.createObjectURL(blob);

@@ -76,6 +76,13 @@ export function FarmSettingsModal({
       ...d,
       farm: {
         ...profile,
+        /*
+         * `profile` es la copia que se hizo al abrir Ajustes. Las ubicaciones
+         * no se editan aquí, así que se toman de lo que hay ahora: si llegara
+         * una sincronización con una ubicación nueva mientras esta ventana
+         * está abierta, guardar los ajustes no debe borrarla.
+         */
+        ubicaciones: d.farm?.ubicaciones ?? profile.ubicaciones,
         nombreExplotacion: profile.nombreExplotacion.trim(),
         titular: profile.titular.trim()
       }

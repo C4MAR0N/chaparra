@@ -55,6 +55,14 @@ export interface FarmProfile {
   precioKgCarneEuro?: number;
   /** Municipio para la previsión meteorológica. */
   municipio?: Municipio;
+  /*
+   * Los cercados de la explotación, escritos una sola vez. Antes la ubicación
+   * de cada animal se tecleaba a mano y bastaba una errata —«Pantno»— para
+   * partir una manada en dos sin que nadie se diera cuenta. Opcional: una
+   * explotación de antes no la trae, y sus ubicaciones se siguen leyendo de
+   * los propios animales.
+   */
+  ubicaciones?: string[];
   moneda: 'EUR';
 }
 export interface HealthRecord {

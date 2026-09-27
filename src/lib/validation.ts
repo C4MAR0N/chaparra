@@ -81,6 +81,14 @@ export function isFarm(v: unknown): v is FarmProfile {
         Math.abs(m.lon) <= 180 &&
         optional(m.codigoIne, x => typeof x === 'string' && /^\d{5}$/.test(x))
     ) &&
+    optional(
+      v.ubicaciones,
+      x =>
+        strings(x) &&
+        x.length <= 500 &&
+        x.every(u => nonempty(u) && u.length <= 60) &&
+        new Set(x).size === x.length
+    ) &&
     v.moneda === 'EUR'
   );
 }

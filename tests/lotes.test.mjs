@@ -8,6 +8,7 @@ const {
   animalesDelLote,
   lotesDeAnimal,
   esPrevisto,
+  esOperacion,
   animalesEnLotes
 } = await import('../src/services/lotes.ts');
 const { isFarmData } = await import('../src/lib/validation.ts');
@@ -113,7 +114,12 @@ test('una baja por muerte deja «Muerto», no «Vendido»', () => {
   assert.equal(salida.animals[0].fechaBaja, FECHA);
 });
 
-test('un traslado cambia la ubicación y guarda el destino', () => {
+test('un traslado cambia la ubicación y no deja lote', () => {
+  /*
+   * Un traslado es solo un cambio de cercado. Verlo en «Lotes» junto a
+   * destetes y ventas metía ruido: no es una operación que haya que poder
+   * abrir despues como grupo.
+   */
   const salida = aplicarLote(datos([animal('ES1'), animal('ES2')]), {
     tipo: 'Traslado',
     fecha: FECHA,
@@ -123,7 +129,14 @@ test('un traslado cambia la ubicación y guarda el destino', () => {
   assert.equal(salida.animals[0].ubicacion, 'Pantano', 'se guarda sin espacios sobrantes');
   assert.equal(salida.animals[1].ubicacion, 'Virgen');
   assert.equal(salida.animals[0].categoria, 'Activo', 'trasladar no da de baja');
-  assert.equal(salida.lotes[0].ubicacionDestino, 'Pantano');
+  assert.equal(salida.lotes.length, 0, 'no se registra como lote');
+  assert.ok(isFarmData(salida));
+});
+
+test('los traslados de antes de este cambio no salen entre las operaciones', () => {
+  // Siguen en los datos para no tener que propagar su borrado, pero no se enseñan.
+  assert.equal(esOperacion({ tipo: 'Traslado' }), false);
+  for (const tipo of ['Destete', 'Venta', 'Baja']) assert.equal(esOperacion({ tipo }), true);
 });
 
 test('un destete da de baja como «Destetado», con su fecha', () => {
@@ -354,7 +367,8 @@ test('el historial de un animal sale del más reciente al más antiguo', () => {
   ];
   assert.deepEqual(
     lotesDeAnimal(lotes, 'id-ES1').map(l => l.id),
-    ['l2', 'l1']
+    ['l1'],
+    'el traslado l2 es mas reciente pero no es una operacion y no sale'
   );
 });
 

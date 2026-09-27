@@ -15,6 +15,7 @@ import {
   uid
 } from '../lib/domain';
 import { nonnegative, validDate } from '../lib/validation';
+import { ubicacionesDisponibles } from '../lib/ubicaciones';
 import { Banner, Button, ComboBox, Field, Input, Modal, Select, Textarea } from './ui';
 export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClose: () => void }) {
   const { data, farm, update, notify } = useFarm();
@@ -81,6 +82,12 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
   const animalsConDraft = data.animals.some(a => a.id === draft.id)
     ? data.animals.map(a => (a.id === draft.id ? draft : a))
     : [...data.animals, draft];
+  /*
+   * Las creadas más las que ya usan los animales, así que la ubicación actual
+   * de esta ficha siempre está entre las opciones: abrir y guardar un animal
+   * nunca le cambia el cercado sin querer.
+   */
+  const ubicaciones = ubicacionesDisponibles(farm, data.animals);
   const madresPosibles = data.animals
     .filter(
       a =>
@@ -274,8 +281,23 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
               }))}
             />
           </Field>
-          <Field label="Ubicación">
-            <Input value={draft.ubicacion} onChange={e => patch({ ubicacion: e.target.value })} />
+          {/* Desplegable y no texto libre: escrita a mano, una errata partía
+              la manada en dos sin que nadie lo viera. */}
+          <Field
+            label="Ubicación"
+            help="Las ubicaciones se crean y se corrigen en la pantalla del rebaño, en «Ubicaciones»."
+          >
+            <Select
+              value={draft.ubicacion.trim()}
+              onChange={e => patch({ ubicacion: e.target.value })}
+            >
+              <option value="">Sin ubicación</option>
+              {ubicaciones.map(u => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label="Número de partos" error={errors.partos}>
             <Input

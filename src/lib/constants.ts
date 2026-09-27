@@ -132,7 +132,7 @@ export const TIPOS_LOTE: {
   {
     tipo: 'Traslado',
     titulo: 'Traslado de ubicación',
-    efecto: 'Se les cambia la ubicación a la de destino. Siguen activos.'
+    efecto: 'Se les cambia la ubicación a la de destino. Siguen activos y no se guarda como lote.'
   },
   {
     tipo: 'Baja',

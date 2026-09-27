@@ -3,7 +3,8 @@ import { AlertTriangle } from 'lucide-react';
 import type { Animal, TipoLote } from '../types';
 import { useFarm } from '../context/FarmContext';
 import { TIPOS_LOTE } from '../lib/constants';
-import { today, ubicacionDe } from '../lib/domain';
+import { today } from '../lib/domain';
+import { ubicacionesDisponibles } from '../lib/ubicaciones';
 import { aplicarLote, describirLote } from '../services/lotes';
 import { Banner, Button, Field, Input, Modal, Select, Textarea } from './ui';
 
@@ -24,7 +25,9 @@ export function LoteModal({
 }: {
   animales: Animal[];
   onClose: () => void;
-  onHecho: (loteId: string) => void;
+  /* `null` cuando no queda lote que abrir: un traslado mueve a los animales y
+   * no se registra como operación. */
+  onHecho: (loteId: string | null) => void;
   /* Al vender un destete ya registrado se entra con la venta elegida: obligar a
    * cambiarlo a mano sería pedir dos veces lo que ya se ha dicho. */
   tipoInicial?: TipoLote;
@@ -38,8 +41,8 @@ export function LoteModal({
 
   const definicion = TIPOS_LOTE.find(t => t.tipo === tipo);
   const ubicaciones = useMemo(
-    () => [...new Set(data.animals.map(ubicacionDe))].sort((a, b) => a.localeCompare(b, 'es')),
-    [data.animals]
+    () => ubicacionesDisponibles(data.farm, data.animals),
+    [data.farm, data.animals]
   );
   const propuesta = {
     tipo,
@@ -59,10 +62,18 @@ export function LoteModal({
     e.preventDefault();
     try {
       const siguiente = aplicarLote(data, propuesta);
-      const lote = siguiente.lotes[siguiente.lotes.length - 1];
+      /*
+       * El lote nuevo es el que no estaba antes. Tomar el último de la lista
+       * valía mientras toda operación creaba uno; un traslado ya no lo crea, y
+       * el último sería otro lote cualquiera que se abriría por error.
+       */
+      const previos = new Set(data.lotes.map(l => l.id));
+      const nuevo = siguiente.lotes.find(l => !previos.has(l.id)) ?? null;
       update(() => siguiente);
-      notify(`${describirLote(propuesta, animales, false)} Ya puedes verlo como grupo.`);
-      onHecho(lote.id);
+      notify(
+        describirLote(propuesta, animales, false) + (nuevo ? ' Ya puedes verlo como grupo.' : '')
+      );
+      onHecho(nuevo?.id ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se ha podido registrar la operación.');
     }
@@ -102,25 +113,27 @@ export function LoteModal({
           <Input type="date" value={fecha} required onChange={e => setFecha(e.target.value)} />
         </Field>
 
+        {/* De la lista, no a mano: un traslado a «Pantno» partiría la manada
+            en dos igual que una errata en la ficha. */}
         {tipo === 'Traslado' && (
           <Field
             label="Ubicación de destino"
-            help="Escribe un cercado nuevo o elige uno de los que ya usas."
+            help={
+              ubicaciones.length
+                ? 'Las ubicaciones se crean en la pantalla del rebaño, en «Ubicaciones».'
+                : 'Todavía no hay ubicaciones. Créalas en la pantalla del rebaño, en «Ubicaciones».'
+            }
           >
-            <Input
-              list="ubicaciones-lote"
-              value={destino}
-              required
-              placeholder="Cercado del Pantano"
-              onChange={e => setDestino(e.target.value)}
-            />
+            <Select value={destino} required onChange={e => setDestino(e.target.value)}>
+              <option value="">Elige una ubicación</option>
+              {ubicaciones.map(u => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </Select>
           </Field>
         )}
-        <datalist id="ubicaciones-lote">
-          {ubicaciones.map(u => (
-            <option key={u} value={u} />
-          ))}
-        </datalist>
 
         <Field label="Notas" help="Opcional. Comprador, motivo, lo que quieras recordar.">
           <Textarea rows={2} value={notas} onChange={e => setNotas(e.target.value)} />

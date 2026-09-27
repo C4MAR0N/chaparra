@@ -29,10 +29,12 @@ import {
 } from '../lib/domain';
 import { Badge, Button, Card, EmptyState, Field, Input, Select, StatTile } from './ui';
 import { descargarExcel } from '../services/excel';
-import { esPrevisto, etiquetaLote } from '../services/lotes';
+import { esOperacion, esPrevisto, etiquetaLote } from '../services/lotes';
+import { ubicacionesDisponibles } from '../lib/ubicaciones';
 import { AnimalFormModal } from './AnimalFormModal';
 import { AnimalDetailModal } from './AnimalDetailModal';
 import { LoteModal } from './LoteModal';
+import { GestionUbicaciones } from './GestionUbicaciones';
 
 /* Sin filtros la lista se queda corta a propósito: de 235 animales, los cinco
  * primeros ya dicen que la explotación está ahí, y el resto se despliega cuando
@@ -102,6 +104,7 @@ export function CrotalList({ especie }: { especie: Especie }) {
   const selected = animals.find(a => a.id === selectedId);
   const lista = useRef<HTMLDivElement>(null);
   const manadas = useMemo(() => porUbicacion(animals), [animals]);
+  const totalUbicaciones = ubicacionesDisponibles(data.farm, data.animals).length;
   /*
    * Solo los lotes que tocan a esta especie: en una explotación de vacuno y
    * caprino, el destete de los chivos no pinta nada en la pantalla del vacuno.
@@ -109,7 +112,7 @@ export function CrotalList({ especie }: { especie: Especie }) {
   const lotes = useMemo(() => {
     const deLaEspecie = new Set(animals.map(a => a.id));
     return data.lotes
-      .filter(l => l.animalIds.some(id => deLaEspecie.has(id)))
+      .filter(l => esOperacion(l) && l.animalIds.some(id => deLaEspecie.has(id)))
       .sort((a, b) => b.fecha.localeCompare(a.fecha));
   }, [data.lotes, animals]);
   const lote = lotes.find(l => l.id === loteId) ?? null;
@@ -284,9 +287,10 @@ export function CrotalList({ especie }: { especie: Especie }) {
         />
         <StatTile
           label="Ubicaciones"
-          value={manadas.length}
+          value={totalUbicaciones}
           icon={MapPin}
-          onClick={manadas.length ? () => setVerManadas(v => !v) : undefined}
+          /* Siempre se abre, aunque no haya ninguna: es donde se crea la primera. */
+          onClick={() => setVerManadas(v => !v)}
           expanded={verManadas}
         />
         <StatTile
@@ -342,37 +346,49 @@ export function CrotalList({ especie }: { especie: Especie }) {
       )}
       {verManadas && (
         <Card className="space-y-3">
-          <div>
-            <h2 className="section-heading">Reparto por ubicación</h2>
-            <p className="mt-1 text-sm text-stone-600">
-              Solo animales activos. Toca una manada para ver sus crotales.
-            </p>
-          </div>
-          <ul className="divide-y divide-stone-200">
-            {manadas.map(m => (
-              <li key={m.ubicacion}>
-                <button
-                  type="button"
-                  onClick={() => verManada(m.ubicacion)}
-                  className="flex w-full min-h-12 items-center gap-3 rounded-xl px-2 py-3 text-left hover:bg-brand-50"
-                >
-                  <MapPin size={18} className="shrink-0 text-brand-700" aria-hidden="true" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{m.ubicacion}</p>
-                    <p className="mt-1 text-sm text-stone-600">
-                      {m.hembras} {m.hembras === 1 ? 'hembra' : 'hembras'} · {m.machos}{' '}
-                      {m.machos === 1 ? 'macho' : 'machos'} · edad media {edadTexto(m.mesesMedios)}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-right">
-                    <span className="text-xl font-bold tabular-nums text-brand-900">{m.total}</span>
-                    <span className="block text-xs text-stone-600">animales</span>
-                  </p>
-                  <ChevronRight size={20} className="shrink-0 text-stone-500" aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
+          {manadas.length > 0 && (
+            <>
+              <div>
+                <h2 className="section-heading">Reparto por ubicación</h2>
+                <p className="mt-1 text-sm text-stone-600">
+                  Solo animales activos. Toca una manada para ver sus crotales.
+                </p>
+              </div>
+              <ul className="divide-y divide-stone-200">
+                {manadas.map(m => (
+                  <li key={m.ubicacion}>
+                    <button
+                      type="button"
+                      onClick={() => verManada(m.ubicacion)}
+                      className="flex w-full min-h-12 items-center gap-3 rounded-xl px-2 py-3 text-left hover:bg-brand-50"
+                    >
+                      <MapPin size={18} className="shrink-0 text-brand-700" aria-hidden="true" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold">{m.ubicacion}</p>
+                        <p className="mt-1 text-sm text-stone-600">
+                          {m.hembras} {m.hembras === 1 ? 'hembra' : 'hembras'} · {m.machos}{' '}
+                          {m.machos === 1 ? 'macho' : 'machos'} · edad media{' '}
+                          {edadTexto(m.mesesMedios)}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-right">
+                        <span className="text-xl font-bold tabular-nums text-brand-900">
+                          {m.total}
+                        </span>
+                        <span className="block text-xs text-stone-600">animales</span>
+                      </p>
+                      <ChevronRight
+                        size={20}
+                        className="shrink-0 text-stone-500"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <GestionUbicaciones />
         </Card>
       )}
       {animals.length === 0 ? (
@@ -695,7 +711,7 @@ export function CrotalList({ especie }: { especie: Especie }) {
           onHecho={id => {
             setEnGrupo(false);
             salirDeSeleccion();
-            verLote(id);
+            if (id) verLote(id);
           }}
         />
       )}

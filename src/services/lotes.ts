@@ -39,9 +39,20 @@ export function animalesDelLote(animals: Animal[], lote: Lote): Animal[] {
     .sort((a, b) => a.crotal.localeCompare(b.crotal, 'es', { numeric: true }));
 }
 
-/** Los lotes en los que ha estado un animal, del más reciente al más antiguo. */
+/*
+ * Un traslado es solo un cambio de cercado: no es una operación que haya que
+ * poder abrir después como grupo, y verlo en «Lotes» junto a destetes y ventas
+ * solo metía ruido. Ya no se crean; los que se crearon antes de este cambio
+ * siguen en los datos —borrarlos obligaría a propagar el borrado a todos los
+ * dispositivos—, pero no se enseñan.
+ */
+export const esOperacion = (lote: Lote) => lote.tipo !== 'Traslado';
+
+/** Las operaciones en las que ha estado un animal, de la más reciente a la más antigua. */
 export const lotesDeAnimal = (lotes: Lote[], animalId: string) =>
-  lotes.filter(l => l.animalIds.includes(animalId)).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  lotes
+    .filter(l => esOperacion(l) && l.animalIds.includes(animalId))
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
 
 /*
  * Qué animales admite cada operación.
@@ -111,12 +122,14 @@ export function aplicarLote(data: FarmData, propuesta: PropuestaLote): FarmData 
     return { ...a, categoria: 'Destetado', fechaBaja: fecha };
   };
 
+  // El traslado mueve a los animales y ya está: no deja lote.
+  if (tipo === 'Traslado') return { ...data, animals: data.animals.map(cambiar) };
+
   const lote: Lote = {
     id: uid(),
     tipo,
     fecha,
     animalIds,
-    ...(tipo === 'Traslado' ? { ubicacionDestino: destino } : {}),
     ...(notas?.trim() ? { notas: notas.trim() } : {})
   };
 

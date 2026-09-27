@@ -85,8 +85,10 @@ export function isFarm(v: unknown): v is FarmProfile {
       v.ubicaciones,
       x =>
         strings(x) &&
+        // Los mismos límites que conservarUbicaciones: si no coinciden, una
+        // lista heredada de fichas antiguas dejaría la explotación sin cargar.
         x.length <= 500 &&
-        x.every(u => nonempty(u) && u.length <= 60) &&
+        x.every(u => nonempty(u) && u.length <= 200) &&
         new Set(x).size === x.length
     ) &&
     v.moneda === 'EUR'

@@ -203,7 +203,8 @@ export function StatTile({
   help,
   icon: Icon,
   onClick,
-  expanded
+  expanded,
+  accion = 'Ver cuáles'
 }: {
   label: string;
   value: ReactNode;
@@ -212,6 +213,8 @@ export function StatTile({
   /** Si se indica, el dato deja de ser un rótulo y pasa a ser una puerta. */
   onClick?: () => void;
   expanded?: boolean;
+  /** Lo que dice la puerta cuando está cerrada: tiene que avisar de lo que hay detrás. */
+  accion?: string;
 }) {
   const contenido = (
     <>
@@ -238,7 +241,7 @@ export function StatTile({
       >
         {contenido}
         <span className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-700">
-          {expanded ? 'Ocultar' : 'Ver cuáles'}
+          {expanded ? 'Ocultar' : accion}
           <ChevronDown
             size={14}
             className={expanded ? 'rotate-180' : undefined}

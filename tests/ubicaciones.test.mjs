@@ -8,7 +8,9 @@ const {
   borrarUbicacion,
   fichasEn,
   limpiarUbicacion,
-  nombreTrasRenombrar
+  nombreTrasRenombrar,
+  usarOCrearUbicacion,
+  conservarUbicaciones
 } = await import('../src/lib/ubicaciones.ts');
 const { isFarmData } = await import('../src/lib/validation.ts');
 
@@ -198,4 +200,99 @@ test('el nombre final es el que ya existía, no el tecleado', () => {
   const d = datos([animal('ES1', 'Pantano'), animal('ES2', 'Pantno')]);
   assert.equal(nombreTrasRenombrar(d, 'Pantno', 'pantano'), 'Pantano');
   assert.equal(nombreTrasRenombrar(d, 'Pantno', '  Charca  Nueva '), 'Charca Nueva');
+});
+
+test('desde la ficha, una ubicación nueva se crea y se usa', () => {
+  const r = usarOCrearUbicacion(datos([animal('ES1', 'Pantano')]), '  Cercado   Norte ');
+  assert.equal(r.nombre, 'Cercado Norte');
+  assert.deepEqual(r.datos.farm.ubicaciones, ['Cercado Norte']);
+  assert.ok(isFarmData(r.datos));
+});
+
+test('desde la ficha, si ya existe con otras mayúsculas se usa la que había', () => {
+  // Sin error: el ganadero quería ese cercado. Y sin crear un duplicado.
+  const d = datos([animal('ES1', 'Pantano')]);
+  const r = usarOCrearUbicacion(d, 'pantano');
+  assert.equal(r.nombre, 'Pantano');
+  assert.equal(r.datos, d, 'no toca nada');
+});
+
+test('desde la ficha, un nombre vacío sigue sin valer', () => {
+  assert.throws(() => usarOCrearUbicacion(datos([]), '   '), /Escribe el nombre/);
+});
+
+/*
+ * El camino por el que pasa cada escritura: se conserva antes del cambio y
+ * después. Aquí se reproduce tal cual, para probar lo que de verdad ocurre y no
+ * solo la función suelta.
+ */
+const { aplicarLote } = await import('../src/services/lotes.ts');
+const { marcarCambios } = await import('../src/services/sincronizacion.ts');
+const escribir = (previo, cambio) => conservarUbicaciones(cambio(conservarUbicaciones(previo)));
+
+test('sacar la última vaca de un cercado no lo borra', () => {
+  /*
+   * El fallo que motivó esto: en una explotación de antes, sin lista, mover la
+   * manada entera del Pantano a otro cercado hacía desaparecer el Pantano.
+   */
+  const previo = datos([animal('ES1', 'Pantano'), animal('ES2', 'Virgen')]);
+  const vista = conservarUbicaciones(previo); // lo que ven las pantallas
+  const movida = aplicarLote(vista, {
+    tipo: 'Traslado',
+    fecha: '2026-09-20',
+    animalIds: ['id-ES1'],
+    ubicacionDestino: 'Virgen'
+  });
+  const siguiente = escribir(previo, () => movida);
+  assert.equal(siguiente.animals[0].ubicacion, 'Virgen');
+  assert.ok(
+    ubicacionesDisponibles(siguiente.farm, siguiente.animals).includes('Pantano'),
+    'el Pantano sigue ahí aunque esté vacío'
+  );
+  assert.ok(isFarmData(siguiente));
+});
+
+test('lo renombrado no vuelve a aparecer', () => {
+  const previo = datos([animal('ES1', 'Pantno'), animal('ES2', 'Pantano')]);
+  const siguiente = escribir(previo, d => renombrarUbicacion(d, 'Pantno', 'Pantano'));
+  assert.deepEqual(ubicacionesDisponibles(siguiente.farm, siguiente.animals), ['Pantano']);
+});
+
+test('lo borrado a propósito no vuelve a aparecer', () => {
+  const previo = datos([animal('ES1', 'Pantano')], ['Pantano', 'Alameda']);
+  const siguiente = escribir(previo, d => borrarUbicacion(d, 'Alameda'));
+  assert.deepEqual(ubicacionesDisponibles(siguiente.farm, siguiente.animals), ['Pantano']);
+});
+
+test('restaurar una copia sin lista reconstruye la lista desde los animales', () => {
+  const previo = datos([animal('ES9', 'Otro')], ['Otro']);
+  const copia = datos([animal('ES1', 'Pantano'), animal('ES2', 'Virgen')]);
+  const siguiente = escribir(previo, () => copia);
+  assert.deepEqual([...siguiente.farm.ubicaciones].sort(), ['Pantano', 'Virgen']);
+});
+
+test('si la lista crece, la explotación se marca como cambiada y sube', () => {
+  // Si no subiera, el otro dispositivo seguiría sin la lista y perdería el cercado.
+  const previo = datos([animal('ES1', 'Pantano')]);
+  const siguiente = escribir(previo, d => d);
+  const metas = marcarCambios(previo, siguiente, {});
+  assert.ok(metas['explotacion:unica'], 'la explotación tiene que viajar al servidor');
+});
+
+test('si no falta nada, no se toca: la explotación no se marca sin motivo', () => {
+  const d = datos([animal('ES1', 'Pantano')], ['Pantano']);
+  assert.equal(conservarUbicaciones(d), d);
+});
+
+test('un nombre heredado demasiado largo no invalida la explotación', () => {
+  /*
+   * Antes la ubicación se tecleaba sin límite. Meterla en la lista tal cual
+   * haría que la validación rechazara la explotación entera al cargarla, que
+   * es muchísimo peor que dejar fuera ese nombre.
+   */
+  const larga = 'x'.repeat(250);
+  const d = datos([animal('ES1', larga), animal('ES2', 'Pantano')]);
+  const conservado = conservarUbicaciones(d);
+  assert.deepEqual(conservado.farm.ubicaciones, ['Pantano']);
+  assert.ok(isFarmData(conservado));
 });

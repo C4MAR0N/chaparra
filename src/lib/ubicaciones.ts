@@ -123,3 +123,60 @@ export function borrarUbicacion(data: FarmData, nombre: string): FarmData {
     farm: { ...data.farm, ubicaciones: (data.farm.ubicaciones ?? []).filter(u => u !== nombre) }
   };
 }
+
+/*
+ * Para dar de alta una ubicación sin salir de la ficha del animal, que es donde
+ * de verdad hace falta: se está apuntando una vaca y su cercado no existe
+ * todavía. Si ya existe con otra forma —se escribe «pantano» teniendo
+ * «Pantano»— se usa la que había en vez de dar un error: el ganadero quería ese
+ * cercado, y así nunca quedan dos que solo se distinguen en las mayúsculas.
+ */
+export function usarOCrearUbicacion(
+  data: FarmData,
+  nombre: string
+): { datos: FarmData; nombre: string } {
+  const limpio = validarNombre(nombre);
+  const existente = ubicacionesDisponibles(data.farm, data.animals).find(
+    u => clave(u) === clave(limpio)
+  );
+  if (existente) return { datos: data, nombre: existente };
+  return { datos: crearUbicacion(data, limpio), nombre: limpio };
+}
+
+/*
+ * Límites de la lista guardada. Son más amplios que los del campo de texto
+ * (MAX_UBICACION) porque aquí también entran nombres heredados de fichas
+ * antiguas, que se tecleaban sin límite. Tienen que coincidir con la
+ * validación: una lista que la validación rechace deja la explotación sin
+ * cargar, y eso es mucho peor que perder una ubicación.
+ */
+export const MAX_UBICACION_GUARDADA = 200;
+export const MAX_UBICACIONES = 500;
+
+/*
+ * Una ubicación que solo existe porque la usa algún animal desaparece en cuanto
+ * sale de ella la última vaca. Les pasaba a las explotaciones de antes, que no
+ * traen lista: mover toda la manada del Pantano a otro cercado —una rotación de
+ * pastos normal— borraba el Pantano, y para volver había que crearlo de nuevo.
+ *
+ * Se aplica ANTES de cada cambio, cuando la vaca todavía está dentro: así el
+ * cercado entra en la lista y se queda. Un nombre que ya nadie usa no se añade,
+ * de modo que lo que se renombra o se borra a propósito no vuelve a aparecer.
+ *
+ * Devuelve el mismo objeto si no falta nada, para no marcar la explotación como
+ * cambiada sin motivo.
+ */
+export function conservarUbicaciones(data: FarmData): FarmData {
+  if (!data.farm) return data;
+  const lista = data.farm.ubicaciones ?? [];
+  const faltan: string[] = [];
+  for (const a of data.animals) {
+    const u = a.ubicacion.trim();
+    if (!u || u.length > MAX_UBICACION_GUARDADA) continue;
+    if (lista.includes(u) || faltan.includes(u)) continue;
+    if (lista.length + faltan.length >= MAX_UBICACIONES) break;
+    faltan.push(u);
+  }
+  if (!faltan.length) return data;
+  return { ...data, farm: { ...data.farm, ubicaciones: [...lista, ...faltan] } };
+}

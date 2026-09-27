@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode
@@ -13,6 +14,7 @@ import { currentUser } from '../services/auth';
 import { marcarCambios } from '../services/sincronizacion';
 import { leerMetas, guardarMetas, sincronizar, type ResultadoSync } from '../services/sincronizar';
 import { hayNube } from '../services/nube';
+import { conservarUbicaciones } from '../lib/ubicaciones';
 export type EstadoNube = 'inactiva' | 'sincronizando' | 'al-dia' | 'sin-conexion' | 'error';
 interface FarmContextValue {
   user: UserRecord;
@@ -41,7 +43,14 @@ export function FarmProvider({ user, children }: { user: UserRecord; children: R
         notify('La sesión ha cambiado. Inicia sesión de nuevo antes de guardar.');
         return;
       }
-      const next = change(current.current);
+      /*
+       * Las ubicaciones en uso se guardan en la lista antes del cambio, mientras
+       * la vaca sigue dentro: si no, sacar la última de un cercado lo borraba.
+       * Y otra vez después, por si el cambio lo sustituye todo (una copia de
+       * seguridad sin lista). Si con eso la lista crece, la explotación queda
+       * marcada como cambiada y sube, y el otro dispositivo tampoco la pierde.
+       */
+      const next = conservarUbicaciones(change(conservarUbicaciones(current.current)));
       replaceData(user.id, next);
       // Se anota qué ha cambiado para que la sincronización suba solo eso.
       if (hayNube) {
@@ -128,10 +137,26 @@ export function FarmProvider({ user, children }: { user: UserRecord; children: R
     const timer = setTimeout(() => notify(''), 6000);
     return () => clearTimeout(timer);
   }, [notice]);
-  if (!data.farm) return null;
+  /*
+   * Lo que ven las pantallas ya lleva la lista completa. Hace falta porque
+   * varias calculan el cambio por su cuenta a partir de `data` y luego lo
+   * entregan hecho (update(() => siguiente)): sin esta vista, lo calcularían
+   * sobre una lista a la que todavía le faltan los cercados en uso.
+   */
+  const vista = useMemo(() => conservarUbicaciones(data), [data]);
+  if (!vista.farm) return null;
   return (
     <FarmContext.Provider
-      value={{ user, data, farm: data.farm, update, notice, notify, estadoNube, sincronizarAhora }}
+      value={{
+        user,
+        data: vista,
+        farm: vista.farm,
+        update,
+        notice,
+        notify,
+        estadoNube,
+        sincronizarAhora
+      }}
     >
       {children}
     </FarmContext.Provider>

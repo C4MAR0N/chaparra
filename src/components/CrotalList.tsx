@@ -292,6 +292,8 @@ export function CrotalList({ especie }: { especie: Especie }) {
           /* Siempre se abre, aunque no haya ninguna: es donde se crea la primera. */
           onClick={() => setVerManadas(v => !v)}
           expanded={verManadas}
+          /* «Ver cuáles» no decía que ahí se crean: había quien no las encontraba. */
+          accion="Ver y añadir"
         />
         <StatTile
           label="Lotes"

@@ -15,8 +15,13 @@ import {
   uid
 } from '../lib/domain';
 import { nonnegative, validDate } from '../lib/validation';
-import { ubicacionesDisponibles } from '../lib/ubicaciones';
+import { MAX_UBICACION, ubicacionesDisponibles, usarOCrearUbicacion } from '../lib/ubicaciones';
+
 import { Banner, Button, ComboBox, Field, Input, Modal, Select, Textarea } from './ui';
+
+/* Empieza por el carácter nulo, que no se puede teclear en un campo de texto:
+ * ninguna ubicación real puede llamarse así. */
+const NUEVA_UBICACION = '\u0000nueva';
 export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClose: () => void }) {
   const { data, farm, update, notify } = useFarm();
   const first = farm.especies[0];
@@ -62,6 +67,8 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
           historialSanitario: []
         }
   );
+  /* `null` mientras se elige de la lista; texto cuando se está creando una. */
+  const [ubicacionNueva, setUbicacionNueva] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({}),
     [child, setChild] = useState('');
   /*
@@ -130,9 +137,17 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
       nextErrors.numbers = 'Los importes y pesos deben ser números no negativos.';
     if (draft.pesoKg !== undefined && draft.pesoKg <= 0)
       nextErrors.numbers = 'El peso debe ser mayor que cero; déjalo vacío si no lo conoces.';
+    let ubicacion = draft.ubicacion.trim();
+    if (ubicacionNueva !== null) {
+      try {
+        ubicacion = usarOCrearUbicacion(data, ubicacionNueva).nombre;
+      } catch (e) {
+        nextErrors.ubicacion = e instanceof Error ? e.message : 'Revisa el nombre de la ubicación.';
+      }
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
-    let saved = { ...draft, crotal, raza: draft.raza.trim(), ubicacion: draft.ubicacion.trim() };
+    let saved = { ...draft, crotal, raza: draft.raza.trim(), ubicacion };
     if (
       !initial ||
       initial.estadoSanitario !== draft.estadoSanitario ||
@@ -155,38 +170,45 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
     }
     const weightChanged =
       animalMeat(saved, farm) && saved.pesoKg !== undefined && saved.pesoKg !== initial?.pesoKg;
-    update(current => ({
-      ...current,
-      /*
-       * Dos pasadas, y las dos hacen falta. La primera cuelga a este animal de
-       * su madre. La segunda cuelga de este animal a las crías que se le hayan
-       * asociado aquí, y de paso las despega de la madre que tuvieran antes:
-       * sin eso, una cría añadida desde la ficha de la madre se quedaba en las
-       * dos listas y el árbol decía que tenía dos madres.
-       */
-      animals: saved.criasAsociadas.reduce(
-        (lista, cria) => aplicarMadre(lista, cria, saved.id),
-        aplicarMadre(
-          initial
-            ? current.animals.map(a => (a.id === saved.id ? saved : a))
-            : [saved, ...current.animals],
-          saved.id,
-          madre
-        )
-      ),
-      weightRecords: weightChanged
-        ? [
-            ...current.weightRecords.filter(r => !(r.animalId === saved.id && r.fecha === today())),
-            {
-              id: uid(),
-              fecha: today(),
-              animalId: saved.id,
-              pesoKg: saved.pesoKg!,
-              notas: 'Peso registrado en la ficha.'
-            }
-          ]
-        : current.weightRecords
-    }));
+    update(actual => {
+      // Si se ha creado una ubicación desde aquí, entra en la lista de la explotación.
+      const current =
+        ubicacionNueva !== null ? usarOCrearUbicacion(actual, ubicacionNueva).datos : actual;
+      return {
+        ...current,
+        /*
+         * Dos pasadas, y las dos hacen falta. La primera cuelga a este animal de
+         * su madre. La segunda cuelga de este animal a las crías que se le hayan
+         * asociado aquí, y de paso las despega de la madre que tuvieran antes:
+         * sin eso, una cría añadida desde la ficha de la madre se quedaba en las
+         * dos listas y el árbol decía que tenía dos madres.
+         */
+        animals: saved.criasAsociadas.reduce(
+          (lista, cria) => aplicarMadre(lista, cria, saved.id),
+          aplicarMadre(
+            initial
+              ? current.animals.map(a => (a.id === saved.id ? saved : a))
+              : [saved, ...current.animals],
+            saved.id,
+            madre
+          )
+        ),
+        weightRecords: weightChanged
+          ? [
+              ...current.weightRecords.filter(
+                r => !(r.animalId === saved.id && r.fecha === today())
+              ),
+              {
+                id: uid(),
+                fecha: today(),
+                animalId: saved.id,
+                pesoKg: saved.pesoKg!,
+                notas: 'Peso registrado en la ficha.'
+              }
+            ]
+          : current.weightRecords
+      };
+    });
     notify(initial ? 'Ficha actualizada.' : 'Animal dado de alta.');
     onClose();
   }
@@ -285,11 +307,18 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
               la manada en dos sin que nadie lo viera. */}
           <Field
             label="Ubicación"
-            help="Las ubicaciones se crean y se corrigen en la pantalla del rebaño, en «Ubicaciones»."
+            help="Se corrigen y se renombran en la pantalla del rebaño, en «Ubicaciones»."
           >
             <Select
-              value={draft.ubicacion.trim()}
-              onChange={e => patch({ ubicacion: e.target.value })}
+              value={ubicacionNueva !== null ? NUEVA_UBICACION : draft.ubicacion.trim()}
+              onChange={e => {
+                if (e.target.value === NUEVA_UBICACION) {
+                  setUbicacionNueva('');
+                  return;
+                }
+                setUbicacionNueva(null);
+                patch({ ubicacion: e.target.value });
+              }}
             >
               <option value="">Sin ubicación</option>
               {ubicaciones.map(u => (
@@ -297,8 +326,27 @@ export function AnimalFormModal({ initial, onClose }: { initial?: Animal; onClos
                   {u}
                 </option>
               ))}
+              {/* Donde de verdad hace falta: se está apuntando una vaca y su
+                  cercado todavía no existe. Obligar a salir de la ficha para
+                  crearlo era un callejón sin salida. */}
+              <option value={NUEVA_UBICACION}>+ Nueva ubicación…</option>
             </Select>
           </Field>
+          {ubicacionNueva !== null && (
+            <Field
+              label="Nombre de la nueva ubicación"
+              error={errors.ubicacion}
+              help="Se añade a la lista y queda disponible para los demás animales."
+            >
+              <Input
+                value={ubicacionNueva}
+                maxLength={MAX_UBICACION}
+                autoFocus
+                placeholder="Cercado del Pantano"
+                onChange={e => setUbicacionNueva(e.target.value)}
+              />
+            </Field>
+          )}
           <Field label="Número de partos" error={errors.partos}>
             <Input
               type="number"

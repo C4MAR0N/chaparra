@@ -38,17 +38,24 @@ const esperar = ms => new Promise(r => setTimeout(r, ms));
 const REINTENTOS = 4;
 const ESPERA_BASE_MS = 20000;
 
+/*
+ * El 429 no es el único tropiezo que se arregla solo. El servidor de datos de
+ * AEMET devuelve a veces un error en el segundo paso (la URL que acaba de
+ * entregar aún no está lista) y otras la conexión se corta sin respuesta
+ * («fetch failed»). Sin reintentarlos, cada uno de esos cortes de un segundo
+ * acababa en un correo de fallo con la previsión publicada todavía al día.
+ */
+const pasajero = e => e.limitada || e.pasajero;
+
 /** AEMET responde con un JSON que contiene la URL real de los datos. */
 async function aemet(ruta) {
   for (let intento = 0; ; intento++) {
     try {
       return await pedirAemet(ruta);
     } catch (e) {
-      if (!e.limitada || intento >= REINTENTOS) throw e;
+      if (!pasajero(e) || intento >= REINTENTOS) throw e;
       const espera = ESPERA_BASE_MS * (intento + 1);
-      console.warn(
-        `AEMET ha limitado las peticiones. Reintento ${intento + 1} de ${REINTENTOS} en ${espera / 1000} s.`
-      );
+      console.warn(`${e.message} Reintento ${intento + 1} de ${REINTENTOS} en ${espera / 1000} s.`);
       await esperar(espera);
     }
   }
@@ -60,20 +67,44 @@ function limitada(mensaje) {
   return e;
 }
 
+function fallo(mensaje, { pasajero = false } = {}) {
+  const e = new Error(mensaje);
+  e.pasajero = pasajero;
+  return e;
+}
+
+/** Un corte de red llega como excepción de fetch, no como respuesta. */
+async function descargar(url, opciones) {
+  try {
+    return await fetch(url, opciones);
+  } catch (e) {
+    throw fallo(`Sin conexión con AEMET (${e.cause?.code ?? e.message}).`, { pasajero: true });
+  }
+}
+
 async function pedirAemet(ruta) {
-  const res = await fetch(`${BASE}${ruta}`, { headers: { api_key: CLAVE } });
-  if (res.status === 401) throw new Error('API key de AEMET rechazada o caducada (401).');
+  const res = await descargar(`${BASE}${ruta}`, { headers: { api_key: CLAVE } });
+  if (res.status === 401) throw fallo('API key de AEMET rechazada o caducada (401).');
   if (res.status === 429) throw limitada('AEMET ha limitado las peticiones (429).');
-  if (!res.ok) throw new Error(`AEMET ha respondido ${res.status} en ${ruta}`);
+  if (!res.ok)
+    throw fallo(`AEMET ha respondido ${res.status} en ${ruta}.`, { pasajero: res.status >= 500 });
   const sobre = await res.json();
   // El límite también llega dentro del sobre, con el HTTP en 200.
   if (sobre.estado === 429)
-    throw limitada(`AEMET: ${sobre.descripcion ?? 'demasiadas peticiones'}`);
-  if (sobre.estado && sobre.estado !== 200) throw new Error(`AEMET: ${sobre.descripcion}`);
-  if (!sobre.datos) throw new Error(`AEMET no ha devuelto URL de datos en ${ruta}`);
-  const datos = await fetch(sobre.datos);
+    throw limitada(`AEMET: ${sobre.descripcion ?? 'demasiadas peticiones'}.`);
+  if (sobre.estado === 401) throw fallo('API key de AEMET rechazada o caducada (401).');
+  if (sobre.estado && sobre.estado !== 200)
+    throw fallo(`AEMET: ${sobre.descripcion} (${sobre.estado}).`, {
+      pasajero: sobre.estado >= 500 || sobre.estado === 404
+    });
+  if (!sobre.datos)
+    throw fallo(`AEMET no ha devuelto URL de datos en ${ruta}.`, { pasajero: true });
+  const datos = await descargar(sobre.datos);
   if (datos.status === 429) throw limitada('AEMET ha limitado la descarga de datos (429).');
-  if (!datos.ok) throw new Error(`No se han podido descargar los datos de ${ruta}`);
+  if (!datos.ok)
+    throw fallo(`No se han podido descargar los datos de ${ruta} (${datos.status}).`, {
+      pasajero: true
+    });
   return leerJson(datos, ruta);
 }
 
@@ -218,16 +249,46 @@ const deseados = JSON.parse(await readFile('tiempo-municipios.json', 'utf8'));
 const resueltos = (await resolverCodigos(deseados)).filter(Boolean);
 await mkdir(SALIDA, { recursive: true });
 
+/*
+ * Si AEMET sigue sin responder tras los reintentos, la previsión que ya está
+ * publicada sigue valiendo un buen rato: se actualiza cuatro veces al día y la
+ * app enseña días, no horas. Se conserva y solo se da la voz de alarma cuando
+ * lleva más de un día sin poder renovarse, que ya no es un tropiezo de AEMET.
+ * Una clave rechazada no es pasajera y avisa siempre.
+ */
+const MARGEN_SIN_ACTUALIZAR_MS = 24 * 3600 * 1000;
+
+async function publicadaAntes(codigo) {
+  try {
+    const previa = JSON.parse(await readFile(path.join(SALIDA, `${codigo}.json`), 'utf8'));
+    const edad = Date.now() - Date.parse(previa.actualizado);
+    return Number.isFinite(edad) ? { edad } : null;
+  } catch {
+    return null;
+  }
+}
+
 const indice = [];
 for (const m of resueltos) {
+  const entrada = { nombre: m.nombre, provincia: m.provincia ?? '', codigo: m.codigo };
   try {
     const datos = await municipio(m);
     await writeFile(path.join(SALIDA, `${m.codigo}.json`), JSON.stringify(datos), 'utf8');
-    indice.push({ nombre: m.nombre, provincia: m.provincia ?? '', codigo: m.codigo });
+    indice.push(entrada);
     console.log(`${m.nombre} (${m.codigo}): ${datos.dias.length} días`);
   } catch (e) {
-    console.error(`Error con ${m.nombre}: ${e.message}`);
-    process.exitCode = 1;
+    const previa = pasajero(e) ? await publicadaAntes(m.codigo) : null;
+    if (previa && previa.edad < MARGEN_SIN_ACTUALIZAR_MS) {
+      const horas = Math.round(previa.edad / 3600000);
+      console.log(
+        `::warning::AEMET no responde para ${m.nombre}: ${e.message} ` +
+          `Se mantiene la previsión publicada hace ${horas} h.`
+      );
+      indice.push(entrada);
+    } else {
+      console.error(`Error con ${m.nombre}: ${e.message}`);
+      process.exitCode = 1;
+    }
   }
 }
 await writeFile(path.join(SALIDA, 'indice.json'), JSON.stringify(indice), 'utf8');

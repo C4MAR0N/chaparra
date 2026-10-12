@@ -1,0 +1,42 @@
+name: Mantener Supabase activo
+
+# En el plan gratuito Supabase pausa el proyecto tras 7 días sin consultas a la
+# base de datos. Mientras la sincronización no tenga uso diario, nada la toca, y
+# cada semana el proyecto se quedaba dormido: la app no podía ni iniciar sesión
+# hasta restaurarlo a mano desde el panel.
+#
+# Una lectura al día basta para que cuente como actividad. Va con la misma clave
+# pública que lleva la app, sin sesión, así que la seguridad de la tabla solo le
+# deja ver una lista vacía: no lee ni toca datos de nadie.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    env:
+      URL: https://zytuzxmmorvlspgiudrf.supabase.co
+      CLAVE: sb_publishable_DMogDEDPW2kuKPcwMEVLaw_oLaZND7d
+    steps:
+      - name: Leer de la base de datos
+        # Si falla es que el proyecto ya está pausado o caído, y entonces sí
+        # conviene que llegue el correo: hay que restaurarlo desde el panel.
+        run: |
+          for intento in 1 2 3; do
+            codigo=$(curl -sS -m 30 -o respuesta.txt -w '%{http_code}' \
+              -H "apikey: $CLAVE" -H "Authorization: Bearer $CLAVE" \
+              "$URL/rest/v1/registros?select=id&limit=1" || echo 000)
+            if [ "$codigo" = 200 ]; then
+              echo "Supabase responde."
+              exit 0
+            fi
+            echo "Intento $intento: Supabase ha respondido $codigo: $(head -c 300 respuesta.txt)"
+            sleep 30
+          done
+          echo "::error::Supabase no responde. Si está pausado, restáuralo desde el panel."
+          exit 1

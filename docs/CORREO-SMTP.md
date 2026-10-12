@@ -85,5 +85,7 @@ como sospechoso, que es justo lo que se quería evitar.
 - Site URL: `https://chaparra.agrovanza.es/` ✅
 - URL de redirección permitida: la misma ✅
 - Confirmación de correo al registrarse: activada ✅
-- SMTP propio: **pendiente**
-- Plantillas en español: bloqueadas hasta configurar el SMTP
+- SMTP propio (Hostinger): conectado ✅
+- SPF, DKIM y DMARC de `agrovanza.es` apuntando a Hostinger: comprobados ✅
+- Plantillas en español: **pendiente** de pegarlas (paso 2)
+- Prueba real de alta con confirmación por correo: **pendiente**
